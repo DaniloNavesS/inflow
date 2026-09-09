@@ -1,47 +1,36 @@
 ---
 sidebar_position: 1
+title: Visão geral
 ---
 
-# Tutorial Intro
+# Inflow
 
-Let's discover **Docusaurus in less than 5 minutes**.
+O Inflow é um projeto acadêmico de **Banco de Dados** com foco na análise de gastos dos gabinetes dos senadores. A proposta é organizar informações sobre despesas parlamentares e explorar perguntas sobre o uso de recursos públicos.
 
-## Getting Started
+## Sobre o projeto
 
-Get started by **creating a new site**.
+O trabalho pretende conectar a construção de um banco de dados à análise de despesas: compreender os registros, estruturar suas relações e realizar consultas que ajudem a interpretar os gastos.
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+Esta documentação está em construção. Fontes, período de análise e critérios de inclusão ainda precisam ser documentados; esta página apresenta a proposta, sem antecipar resultados.
 
-### What you'll need
+## Modelagem dos dados
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+A modelagem deverá representar os conceitos necessários à análise, como **senadores**, **despesas** e **fornecedores**, conforme as informações disponíveis na fonte selecionada.
 
-## Generate a new site
+Esta etapa deverá documentar:
 
-Generate a new Docusaurus site using the **classic template**.
+- A origem dos dados e o período abrangido.
+- As entidades, seus atributos e relacionamentos.
+- As regras de integridade e o tratamento de registros incompletos ou duplicados.
+- O processo de importação e as decisões de transformação dos dados.
 
-The classic template will automatically be added to your project after you run the command:
+## Consultas e análise
 
-```bash
-npm init docusaurus@latest my-website classic
-```
+Algumas perguntas que podem orientar a investigação:
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+- Como os gastos se distribuem entre as categorias de despesa?
+- Como os valores variam ao longo do período analisado?
+- Quais fornecedores aparecem com maior frequência nos registros?
+- Quais diferenças aparecem entre os senadores, considerando o contexto e a cobertura dos dados?
 
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
-
-```bash
-cd my-website
-npm run start
-```
-
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+As consultas e os resultados deverão ser apresentados com seus critérios e limitações. Diferenças de valores, por si só, não demonstram irregularidades.
