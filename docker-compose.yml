@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: inflow_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - inflow_network
+
+  ingestor:
+    container_name: inflow_ingestor
+    build:
+      context: ./ingestor
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      INGESTION_YEAR: ${INGESTION_YEAR:-2024}
+      LIMIT_SENADORES: ${LIMIT_SENADORES:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+    restart: "no"
+
+volumes:
+  postgres_data:
+    name: inflow_postgres_data
+
+networks:
+  inflow_network:
+    name: inflow_network
+    driver: bridge
