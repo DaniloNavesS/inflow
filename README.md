@@ -86,6 +86,8 @@ SELECT 'comissoes', COUNT(*) FROM comissoes
 UNION ALL
 SELECT 'participacoes_comissao', COUNT(*) FROM participacoes_comissao
 UNION ALL
+SELECT 'sessoes', COUNT(*) FROM sessoes
+UNION ALL
 SELECT 'sessoes_presenca', COUNT(*) FROM sessoes_presenca
 UNION ALL
 SELECT 'fornecedores', COUNT(*) FROM fornecedores

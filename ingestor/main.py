@@ -249,8 +249,9 @@ def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions
     logger.info("Iniciando ingestão de Sessões e Presenças (Votações Nominais)...")
     
     target_ids = senador_ids if LIMIT_SENADORES <= 0 else senador_ids[:LIMIT_SENADORES]
+    sessoes_unicas = {}
     registros_presenca = []
-    
+
     for idx, sen_id in enumerate(target_ids, 1):
         url = f"https://legis.senado.leg.br/dadosabertos/votacao?codigoParlamentar={sen_id}"
         try:
@@ -274,8 +275,10 @@ def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions
                             if voto_sen:
                                 presenca = voto_sen.get("siglaVotoParlamentar") or "Votou"
                                 
-                        registros_presenca.append((int(sessao_id), sen_id, data_sessao, presenca, tipo_sessao))
-                        
+                        sessoes_unicas[int(sessao_id)] = (int(sessao_id), data_sessao, tipo_sessao)
+                        registros_presenca.append((int(sessao_id), sen_id, presenca))
+
+
             time.sleep(0.12)
         except Exception as e:
             logger.warning("Falha ao consultar sessões/presenças do senador %d: %s", sen_id, e)
@@ -283,21 +286,35 @@ def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions
         if idx % 20 == 0 or idx == len(target_ids):
             logger.info("Processamento de presenças: %d/%d senadores analisados.", idx, len(target_ids))
 
+    # As sessões precisam existir antes das presenças que as referenciam.
+    if sessoes_unicas:
+        query_sessoes = """
+            INSERT INTO sessoes (id, data_sessao, tipo_sessao, timestamp_ingestao, atualizado_em)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO UPDATE SET
+                data_sessao = EXCLUDED.data_sessao,
+                tipo_sessao = EXCLUDED.tipo_sessao,
+                atualizado_em = CURRENT_TIMESTAMP;
+        """
+        with conn.cursor() as cur:
+            execute_batch(cur, query_sessoes, list(sessoes_unicas.values()), page_size=200)
+        conn.commit()
+        logger.info("Upsert concluído: %d sessões plenárias persistidas.", len(sessoes_unicas))
+
     if registros_presenca:
         query_presenca = """
             INSERT INTO sessoes_presenca (
-                sessao_id, senador_id, data_sessao, presenca, tipo_sessao, timestamp_ingestao
+                sessao_id, senador_id, presenca, timestamp_ingestao
             ) VALUES (
-                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP
+                %s, %s, %s, CURRENT_TIMESTAMP
             )
-            ON CONFLICT (sessao_id, senador_id, data_sessao) DO UPDATE SET
-                presenca = EXCLUDED.presenca,
-                tipo_sessao = EXCLUDED.tipo_sessao;
+            ON CONFLICT (sessao_id, senador_id) DO UPDATE SET
+                presenca = EXCLUDED.presenca;
         """
         with conn.cursor() as cur:
             execute_batch(cur, query_presenca, registros_presenca, page_size=200)
         conn.commit()
-        logger.info("Upsert concluído: %d registros de presença/sessões persistidos.", len(registros_presenca))
+        logger.info("Upsert concluído: %d registros de presença persistidos.", len(registros_presenca))
 
 # -----------------------------------------------------------------------------
 # Etapa 4: Ingestão de Fornecedores e Despesas (CEAPS)
@@ -530,6 +547,7 @@ def log_database_summary(conn: psycopg2.extensions.connection):
         "senadores",
         "comissoes",
         "participacoes_comissao",
+        "sessoes",
         "sessoes_presenca",
         "fornecedores",
         "despesas",
