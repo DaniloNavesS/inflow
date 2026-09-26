@@ -6,6 +6,15 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
       POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    # wal_level=logical habilita captura de mudancas via replicacao logica.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
