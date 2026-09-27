@@ -37,6 +37,10 @@ O modelo relacional da E1 continua sendo a fonte OLTP normalizada. A modulariza�
 limites de extração e carga explícitos para permitir a introdução posterior das três camadas sem
 renomear o banco atual como uma camada que ele ainda não representa.
 
+Também não há CDC ou streaming nesta entrega. A configuração de replicação lógica, o fluxo de
+mudanças e a escrita em formato aberto pertencem à E2 e serão introduzidos somente junto com uma
+demonstração real de mudança atravessando o fluxo.
+
 ## Monitoramento
 
 As tabelas `monitoring.pipeline_runs` e `monitoring.job_runs` registram status, duração, erro e
