@@ -1,0 +1,44 @@
+---
+sidebar_position: 6
+title: Arquitetura do pipeline
+---
+
+# Arquitetura do pipeline
+
+## Estrutura atual da E1
+
+A E1 implementa uma fonte transacional PostgreSQL. O código de `ingestion/` separa:
+
+- `clients`: acesso resiliente às fontes oficiais;
+- `config`: parâmetros de ambiente;
+- `database`: conexão com PostgreSQL;
+- `jobs`: cargas por domínio e extração documental do DSF;
+- `monitoring`: execução, duração, falhas e variação dos volumes persistidos;
+- `main.py`: somente a orquestração do fluxo.
+
+As migrations permanecem versionadas em `migrations/`. Elas são aplicadas pelo serviço `migrate`
+inclusive em volumes já existentes; não dependem apenas da inicialização de um volume novo.
+
+## Bronze, Silver e Gold
+
+Bronze, Silver e Gold são uma **arquitetura futura**, não uma capacidade entregue na E1. Criar
+schemas com esses nomes sem persistência bruta, transformações e contratos de qualidade produziria
+uma separação apenas nominal.
+
+A evolução prevista é:
+
+| Camada | Responsabilidade prevista | Situação |
+|---|---|---|
+| Bronze | preservar respostas e documentos brutos, com metadados e hash | não implementada |
+| Silver | padronizar, deduplicar e historizar os dados validados | não implementada |
+| Gold | fornecer fatos e dimensões orientados às perguntas analíticas | não implementada |
+
+O modelo relacional da E1 continua sendo a fonte OLTP normalizada. A modularização atual deixa os
+limites de extração e carga explícitos para permitir a introdução posterior das três camadas sem
+renomear o banco atual como uma camada que ele ainda não representa.
+
+## Monitoramento
+
+As tabelas `monitoring.pipeline_runs` e `monitoring.job_runs` registram status, duração, erro e
+volume antes/depois de cada job. `records_delta = 0` em um reprocessamento idempotente indica que o
+volume permaneceu estável; não significa que nenhuma linha foi lida ou validada.
