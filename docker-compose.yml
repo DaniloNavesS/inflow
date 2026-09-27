@@ -44,12 +44,10 @@ services:
         condition: service_healthy
     networks:
       - inflow_network
-    restart: "no"
 
 volumes:
   postgres_data:
     name: inflow_postgres_data
-
 
 networks:
   inflow_network:
