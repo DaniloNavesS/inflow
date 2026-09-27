@@ -1,4 +1,4 @@
-from attendance import DSF_SAMPLES, parse_attendance_pages, resolve_senator
+from jobs.attendance import DSF_SAMPLES, parse_attendance_pages, resolve_senator
 from domain import supplier_identity
 
 
