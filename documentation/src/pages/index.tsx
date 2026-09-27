@@ -5,9 +5,9 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 const chapters = [
-  {number: '01', title: 'Contexto e propósito', description: 'O problema, as perguntas e o recorte que orientam a análise dos gastos parlamentares.', anchor: 'sobre-o-projeto', tag: 'O ponto de partida'},
-  {number: '02', title: 'Dos dados ao modelo', description: 'A organização das informações e as relações entre senadores, despesas e fornecedores.', anchor: 'modelagem-dos-dados', tag: 'A estrutura'},
-  {number: '03', title: 'Consultas e análise', description: 'Perguntas sobre a distribuição das despesas, sua evolução e os padrões de gasto.', anchor: 'consultas-e-análise', tag: 'A investigação'},
+  {number: '01', title: 'Escopo e perguntas', description: 'As perguntas válidas, o recorte e a situação de implementação da E1.', path: '/docs/escopo-e-perguntas', tag: 'O ponto de partida'},
+  {number: '02', title: 'Dos dados ao modelo', description: 'As relações entre senadores, histórico, despesas, fornecedores e presença.', path: '/docs/modelagem-e-qualidade', tag: 'A estrutura'},
+  {number: '03', title: 'Fontes verificadas', description: 'APIs, endpoints e documentos oficiais usados na carga.', path: '/docs/fontes-e-endpoints', tag: 'A rastreabilidade'},
 ];
 
 export default function Home(): ReactNode {
@@ -37,7 +37,7 @@ export default function Home(): ReactNode {
         </header>
         <section className={styles.project} id="projeto" aria-labelledby="project-title">
           <div className={styles.sectionHeading}><div><span className={styles.smallLabel}>POR DENTRO DO INFLOW</span><Heading as="h2" id="project-title">Entender começa<br />com boas perguntas.</Heading></div><p>Um projeto de banco de dados que aproxima técnica e transparência. Conheça a proposta e o caminho previsto para a análise.</p></div>
-          <div className={styles.cards}>{chapters.map((chapter) => <Link key={chapter.number} to={`/docs/intro#${chapter.anchor}`} className={styles.card}><div className={styles.cardTop}><span>{chapter.number}</span><span aria-hidden="true">↗</span></div><Heading as="h3">{chapter.title}</Heading><p>{chapter.description}</p><span className={styles.cardTag}>{chapter.tag}</span></Link>)}</div>
+          <div className={styles.cards}>{chapters.map((chapter) => <Link key={chapter.number} to={chapter.path} className={styles.card}><div className={styles.cardTop}><span>{chapter.number}</span><span aria-hidden="true">↗</span></div><Heading as="h3">{chapter.title}</Heading><p>{chapter.description}</p><span className={styles.cardTag}>{chapter.tag}</span></Link>)}</div>
         </section>
         <section className={styles.closing} aria-labelledby="closing-title"><span className={styles.smallLabel}>CONHECIMENTO DOCUMENTADO</span><Heading as="h2" id="closing-title">O caminho também importa.</Heading><p>Acompanhe a construção do projeto, suas decisões e possibilidades de análise.</p><Link className={styles.textLink} to="/docs/intro">Começar pela visão geral <span aria-hidden="true">→</span></Link></section>
       </main>

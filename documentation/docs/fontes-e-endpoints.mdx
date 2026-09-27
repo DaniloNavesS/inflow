@@ -1,0 +1,39 @@
+---
+sidebar_position: 4
+title: Fontes e Endpoints
+---
+
+# Fontes verificadas
+
+Todos os caminhos abaixo foram consultados no domínio oficial. A API administrativa usa a base
+`https://adm.senado.gov.br/adm-dadosabertos/api/v1`; a legislativa usa
+`https://legis.senado.leg.br/dadosabertos`.
+
+| Fonte | Caminho verificado | Uso | Situação |
+|---|---|---|---|
+| CEAPS | `/senadores/despesas_ceaps/{ano}` | despesas e fornecedores | carregado |
+| Senadores atuais | `/senador/lista/atual.json` | fotografia atual | carregado |
+| Senadores por legislatura | `/senador/lista/legislatura/{legislatura}.json` | cadastro histórico | carregado para a 57ª |
+| Mandatos e exercícios | `/senador/{codigo}/mandatos.json` | UF, mandato e intervalos de exercício | carregado |
+| Filiações | `/senador/{codigo}/filiacoes.json` | partido vigente no tempo | carregado |
+| Comissões | `/senador/{codigo}/comissoes.json` | vínculos em colegiados | carregado |
+| Cargos em comissões | `/senador/{codigo}/cargos.json` | presidência e outros cargos | verificado nos insumos; ingestão pendente |
+| Composição atual | `/composicao/comissao/{codigo}?ativas=S` | retrato de vagas | apoio, não ingerido |
+| Votações | `/votacao?dataInicio={AAAA-MM-DD}&dataFim={AAAA-MM-DD}` | voto nominal | ingestão pendente |
+| Tipos de comparecimento | `/plenario/lista/tiposComparecimento` | dicionário de ocorrência de voto | não é fonte de presença completa |
+| Recursos utilizados | `/senadores/{codigo}/recursos-utilizados?ano={ano}` | pessoal, benefícios e recursos anuais | carregamento existente |
+| DSF | `/diarios/BuscaPaginasDiario?codDiario=...&paginaInicial=...&paginaFinal=...` | comparecimento oficial | carregado para três sessões |
+
+O vínculo entre as fontes é o código do parlamentar. Não se usa partido/UF atual para fatos
+históricos: a consulta deve selecionar o mandato, exercício e filiação vigentes na data do evento.
+
+## Fornecedores
+
+- CNPJ ou CPF completo: identidade pelo documento somente.
+- CPF mascarado: chave fraca formada por documento mascarado e nome normalizado.
+- Documento ausente: chave por nome normalizado e identificador da despesa; dois lançamentos não
+  são fundidos automaticamente.
+- Grafias repetidas com documento completo: o documento prevalece e o nome pode ser atualizado.
+
+Essa escolha evita a entidade genérica `SEM_DOCUMENTO`. Ela pode manter duplicatas quando a fonte
+omite o identificador; é uma perda deliberada para não unir pessoas ou empresas distintas.

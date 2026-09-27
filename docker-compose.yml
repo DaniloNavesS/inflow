@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: inflow_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
+      - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - inflow_network
+  ingestion:
+    container_name: inflow_ingestion
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    volumes:
+      - ./tests:/tests:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      INGESTION_YEAR: ${INGESTION_YEAR:-2024}
+      LIMIT_SENADORES: ${LIMIT_SENADORES:-0}
+      LEGISLATURE: ${LEGISLATURE:-57}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
+  docs:
+    profiles: ["docs"]
+    container_name: inflow_docs
+    build:
+      context: ./documentation
+      dockerfile: Dockerfile
+    ports:
+      - "${DOCS_PORT:-3000}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: inflow_postgres_data
+
+networks:
+  inflow_network:
+    name: inflow_network
+    driver: bridge
