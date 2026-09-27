@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pdfplumber
 
+from bronze.raw import save_raw_payload
 from domain import normalize_name
 
 
@@ -103,7 +104,7 @@ def resolve_senator(name: str, senators_by_name: dict[str, set[int]]) -> tuple[i
     return None, "NAO_RESOLVIDA"
 
 
-def ingest_dsf_attendance(session, conn, samples=DSF_SAMPLES) -> list[dict]:
+def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute("SELECT id, nome, nome_completo FROM senadores")
         senators_by_name: dict[str, set[int]] = {}
@@ -118,6 +119,11 @@ def ingest_dsf_attendance(session, conn, samples=DSF_SAMPLES) -> list[dict]:
         response = session.get(url, timeout=120)
         response.raise_for_status()
         content = response.content
+        save_raw_payload(
+            conn, entity_type="dsf_document", source_name="diario_senado_federal",
+            source_url=url, run_id=run_id, payload_bytes=content,
+            media_type="application/pdf", http_status=response.status_code,
+        )
 
         try:
             rows = parse_attendance_pages(

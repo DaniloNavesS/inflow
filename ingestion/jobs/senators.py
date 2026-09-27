@@ -5,18 +5,25 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_batch
 
+from bronze.raw import save_raw_payload
 from config import LEGISLATURE, LIMIT_SENADORES
 
 logger = logging.getLogger("inflow_ingestion")
 
-def ingest_senadores(session: requests.Session, conn: psycopg2.extensions.connection) -> list:
+def ingest_senadores(session: requests.Session, conn: psycopg2.extensions.connection, run_id) -> list:
     current_url = "https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json"
     legislature_url = f"https://legis.senado.leg.br/dadosabertos/senador/lista/legislatura/{LEGISLATURE}.json"
     logger.info("Iniciando ingestão de senadores atuais e da %dª legislatura.", LEGISLATURE)
 
     current_response = session.get(current_url, timeout=60)
     current_response.raise_for_status()
-    current = current_response.json().get("ListaParlamentarEmExercicio", {}).get("Parlamentares", {}).get("Parlamentar", [])
+    current_payload = current_response.json()
+    save_raw_payload(
+        conn, entity_type="senators_current", source_name="senado_legislativo",
+        source_url=current_url, run_id=run_id, payload_json=current_payload,
+        media_type="application/json", http_status=current_response.status_code,
+    )
+    current = current_payload.get("ListaParlamentarEmExercicio", {}).get("Parlamentares", {}).get("Parlamentar", [])
     if isinstance(current, dict):
         current = [current]
     current_ids = {
@@ -26,7 +33,13 @@ def ingest_senadores(session: requests.Session, conn: psycopg2.extensions.connec
 
     legislature_response = session.get(legislature_url, timeout=60)
     legislature_response.raise_for_status()
-    historical = legislature_response.json().get("ListaParlamentarLegislatura", {}).get("Parlamentares", {}).get("Parlamentar", [])
+    legislature_payload = legislature_response.json()
+    save_raw_payload(
+        conn, entity_type="senators_legislature", source_name="senado_legislativo",
+        source_url=legislature_url, run_id=run_id, payload_json=legislature_payload,
+        media_type="application/json", http_status=legislature_response.status_code,
+    )
+    historical = legislature_payload.get("ListaParlamentarLegislatura", {}).get("Parlamentares", {}).get("Parlamentar", [])
     if isinstance(historical, dict):
         historical = [historical]
 
@@ -83,18 +96,22 @@ def ingest_senadores(session: requests.Session, conn: psycopg2.extensions.connec
     return senador_ids
 
 
-def ingest_historico_parlamentar(session, conn, senador_ids: list):
+def ingest_historico_parlamentar(session, conn, senador_ids: list, run_id):
     logger.info("Iniciando ingestão de mandatos, exercícios e filiações.")
     target_ids = senador_ids if LIMIT_SENADORES <= 0 else senador_ids[:LIMIT_SENADORES]
     mandatos, exercicios, filiacoes = [], [], []
     for index, senator_id in enumerate(target_ids, 1):
         try:
-            response = session.get(
-                f"https://legis.senado.leg.br/dadosabertos/senador/{senator_id}/mandatos.json",
-                timeout=30,
-            )
+            mandates_url = f"https://legis.senado.leg.br/dadosabertos/senador/{senator_id}/mandatos.json"
+            response = session.get(mandates_url, timeout=30)
             if response.status_code == 200:
-                parliamentary = response.json().get("MandatoParlamentar", {}).get("Parlamentar", {})
+                mandates_payload = response.json()
+                save_raw_payload(
+                    conn, entity_type="mandates", source_name="senado_legislativo",
+                    source_url=mandates_url, run_id=run_id, payload_json=mandates_payload,
+                    media_type="application/json", http_status=response.status_code,
+                )
+                parliamentary = mandates_payload.get("MandatoParlamentar", {}).get("Parlamentar", {})
                 items = parliamentary.get("Mandatos", {}).get("Mandato", [])
                 if isinstance(items, dict):
                     items = [items]
@@ -122,12 +139,16 @@ def ingest_historico_parlamentar(session, conn, senador_ids: list):
                                 exercise.get("DescricaoCausaAfastamento"),
                             ))
 
-            response = session.get(
-                f"https://legis.senado.leg.br/dadosabertos/senador/{senator_id}/filiacoes.json",
-                timeout=30,
-            )
+            affiliations_url = f"https://legis.senado.leg.br/dadosabertos/senador/{senator_id}/filiacoes.json"
+            response = session.get(affiliations_url, timeout=30)
             if response.status_code == 200:
-                parliamentary = response.json().get("FiliacaoParlamentar", {}).get("Parlamentar", {})
+                affiliations_payload = response.json()
+                save_raw_payload(
+                    conn, entity_type="party_affiliations", source_name="senado_legislativo",
+                    source_url=affiliations_url, run_id=run_id, payload_json=affiliations_payload,
+                    media_type="application/json", http_status=response.status_code,
+                )
+                parliamentary = affiliations_payload.get("FiliacaoParlamentar", {}).get("Parlamentar", {})
                 items = parliamentary.get("Filiacoes", {}).get("Filiacao", [])
                 if isinstance(items, dict):
                     items = [items]
@@ -183,4 +204,3 @@ def ingest_historico_parlamentar(session, conn, senador_ids: list):
 # -----------------------------------------------------------------------------
 # Etapa 2: Ingestão de Comissões e Participações
 # -----------------------------------------------------------------------------
-

@@ -103,3 +103,16 @@ def test_pipeline_monitoring(db):
           AND finished_at IS NOT NULL
           AND records_after >= records_before
     """) >= 6
+
+
+def test_bronze_preserves_json_and_pdf_without_duplicates(db):
+    assert scalar(db, "SELECT to_regclass('bronze.payloads_brutos') IS NOT NULL")
+    assert scalar(db, "SELECT count(*) FROM bronze.payloads_brutos WHERE payload_json IS NOT NULL") > 0
+    assert scalar(db, "SELECT count(*) FROM bronze.payloads_brutos WHERE payload_binario IS NOT NULL") >= 3
+    assert scalar(db, """
+        SELECT count(*) FROM (
+            SELECT url_fonte, sha256
+            FROM bronze.payloads_brutos
+            GROUP BY 1, 2 HAVING count(*) > 1
+        ) duplicados
+    """) == 0

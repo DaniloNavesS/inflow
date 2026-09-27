@@ -1,4 +1,5 @@
 from jobs.attendance import DSF_SAMPLES, parse_attendance_pages, resolve_senator
+from bronze.raw import canonical_json_bytes
 from domain import supplier_identity
 
 
@@ -49,3 +50,7 @@ def test_viability_sample_has_three_distinct_deliberative_dates():
     assert len(DSF_SAMPLES) == 3
     assert len({sample["session_date"] for sample in DSF_SAMPLES}) == 3
     assert all("Deliberativa" in sample["session_type"] for sample in DSF_SAMPLES)
+
+
+def test_bronze_json_is_canonical_for_stable_hashing():
+    assert canonical_json_bytes({"b": 2, "a": 1}) == canonical_json_bytes({"a": 1, "b": 2})

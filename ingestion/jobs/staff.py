@@ -5,11 +5,12 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_batch
 
+from bronze.raw import save_raw_payload
 from config import LIMIT_SENADORES
 
 logger = logging.getLogger("inflow_ingestion")
 
-def ingest_estrutura_gabinete(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list, ano: int):
+def ingest_estrutura_gabinete(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list, ano: int, run_id):
     logger.info("Iniciando ingestão de Estrutura de Gabinete e Pessoal para o ano %d...", ano)
     
     target_ids = senador_ids if LIMIT_SENADORES <= 0 else senador_ids[:LIMIT_SENADORES]
@@ -21,6 +22,12 @@ def ingest_estrutura_gabinete(session: requests.Session, conn: psycopg2.extensio
             resp = session.get(url, timeout=30)
             if resp.status_code == 200:
                 payload = resp.json()
+                save_raw_payload(
+                    conn, entity_type="staff", source_name="senado_administrativo",
+                    source_url=url, run_id=run_id, payload_json=payload,
+                    media_type="application/json", http_status=resp.status_code,
+                    ingestion_year=ano,
+                )
                 data_list = payload.get("data", [])
                 for d in data_list:
                     ano_dado = int(d.get("ano") or ano)
@@ -82,4 +89,3 @@ def ingest_estrutura_gabinete(session: requests.Session, conn: psycopg2.extensio
 # -----------------------------------------------------------------------------
 # Validação e Sumário Estatístico
 # -----------------------------------------------------------------------------
-

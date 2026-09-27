@@ -5,11 +5,12 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_batch
 
+from bronze.raw import save_raw_payload
 from config import LIMIT_SENADORES
 
 logger = logging.getLogger("inflow_ingestion")
 
-def ingest_comissoes_e_participacoes(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list):
+def ingest_comissoes_e_participacoes(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list, run_id):
     logger.info("Iniciando ingestão de Comissões e Participações para %d senadores...", len(senador_ids))
     
     comissoes_unicas = {}
@@ -23,6 +24,11 @@ def ingest_comissoes_e_participacoes(session: requests.Session, conn: psycopg2.e
             resp = session.get(url, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
+                save_raw_payload(
+                    conn, entity_type="committees", source_name="senado_legislativo",
+                    source_url=url, run_id=run_id, payload_json=data,
+                    media_type="application/json", http_status=resp.status_code,
+                )
                 comissoes_data = data.get("MembroComissaoParlamentar", {}).get("Parlamentar", {}).get("MembroComissoes", {}).get("Comissao", [])
                 if isinstance(comissoes_data, dict):
                     comissoes_data = [comissoes_data]
@@ -90,4 +96,3 @@ def ingest_comissoes_e_participacoes(session: requests.Session, conn: psycopg2.e
 # -----------------------------------------------------------------------------
 # Etapa 3: Ingestão de Sessões e Presenças (Atuação Parlamentar)
 # -----------------------------------------------------------------------------
-

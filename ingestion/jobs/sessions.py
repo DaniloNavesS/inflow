@@ -7,10 +7,10 @@ from jobs.attendance import ingest_dsf_attendance
 
 logger = logging.getLogger("inflow_ingestion")
 
-def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list):
+def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list, run_id):
     """Compatibilidade do fluxo principal: presença vem exclusivamente do DSF."""
     logger.info("Iniciando ingestão documental de presença no DSF.")
-    metrics = ingest_dsf_attendance(session, conn)
+    metrics = ingest_dsf_attendance(session, conn, run_id)
     for metric in metrics:
         logger.info(
             "DSF %d, sessão %d: %d/%d linhas; %d não resolvidas; %s.",
@@ -23,4 +23,3 @@ def ingest_sessoes_presenca(session: requests.Session, conn: psycopg2.extensions
 # -----------------------------------------------------------------------------
 # Etapa 4: Ingestão de Fornecedores e Despesas (CEAPS)
 # -----------------------------------------------------------------------------
-

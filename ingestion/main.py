@@ -40,6 +40,7 @@ def main():
             ingest_senadores,
             session,
             connection,
+            run_id,
         )
         execute_monitored_job(
             connection,
@@ -50,6 +51,7 @@ def main():
             session,
             connection,
             senator_ids,
+            run_id,
         )
         execute_monitored_job(
             connection,
@@ -60,6 +62,7 @@ def main():
             session,
             connection,
             senator_ids,
+            run_id,
         )
         execute_monitored_job(
             connection,
@@ -70,6 +73,7 @@ def main():
             session,
             connection,
             senator_ids,
+            run_id,
         )
         execute_monitored_job(
             connection,
@@ -80,6 +84,7 @@ def main():
             session,
             connection,
             INGESTION_YEAR,
+            run_id,
         )
         execute_monitored_job(
             connection,
@@ -91,6 +96,7 @@ def main():
             connection,
             senator_ids,
             INGESTION_YEAR,
+            run_id,
         )
         log_database_summary(connection)
         finish_pipeline(connection, run_id, time.perf_counter() - started_at)
