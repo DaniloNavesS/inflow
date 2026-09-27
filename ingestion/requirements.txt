@@ -4,3 +4,7 @@ urllib3==2.5.0
 python-dotenv==1.1.1
 pdfplumber==0.11.7
 pytest==8.4.2
+requests>=2.31.0
+psycopg2-binary>=2.9.9
+urllib3>=2.0.0
+python-dotenv>=1.0.0

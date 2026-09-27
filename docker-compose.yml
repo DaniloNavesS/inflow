@@ -10,11 +10,18 @@ services:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
+      - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"
+        ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 5s
     restart: unless-stopped
     networks:
@@ -63,7 +70,6 @@ services:
         condition: service_completed_successfully
     networks:
       - inflow_network
-    restart: "no"
 
   docs:
     profiles: ["docs"]
