@@ -96,6 +96,7 @@ def main():
             ingest_senadores,
             session,
             conn,
+            run_id,
         )
 
         # 2. Comissões
@@ -107,6 +108,7 @@ def main():
             session,
             conn,
             senador_ids,
+            run_id,
         )
 
         # 3. Sessões
@@ -118,6 +120,7 @@ def main():
             session,
             conn,
             senador_ids,
+            run_id,
         )
 
         # 4. CEAPS
@@ -129,6 +132,7 @@ def main():
             session,
             conn,
             INGESTION_YEAR,
+            run_id,
         )
 
         # 5. Estrutura de Gabinete
@@ -141,6 +145,7 @@ def main():
             conn,
             senador_ids,
             INGESTION_YEAR,
+            run_id,
         )
 
         # Auditoria

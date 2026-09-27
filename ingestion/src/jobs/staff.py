@@ -1,11 +1,10 @@
 import logging
 import time
-
 import psycopg2
 import requests
 from psycopg2.extras import execute_batch
-
 from config import LIMIT_SENADORES
+from bronze.raw import save_raw_payload
 
 logger = logging.getLogger("inflow_ingestor")
 
@@ -15,6 +14,7 @@ def ingest_estrutura_gabinete(
     conn: psycopg2.extensions.connection,
     senador_ids: list,
     ano: int,
+    run_id
 ):
 
     logger.info(
@@ -33,6 +33,17 @@ def ingest_estrutura_gabinete(
 
             if resp.status_code == 200:
                 payload = resp.json()
+
+                save_raw_payload(
+                conn=conn,
+                entity_type="staff",
+                source_name="senado_administrativo",
+                source_url=url,
+                payload=payload,
+                run_id=run_id,
+                http_status=resp.status_code,
+                ingestion_year=ano,
+                )
 
                 data_list = payload.get("data", [])
 

@@ -2,11 +2,12 @@ import logging
 import psycopg2
 import requests
 from psycopg2.extras import execute_batch
+from bronze.raw import save_raw_payload
 
 logger = logging.getLogger("inflow_ingestor")
 
 def ingest_senadores(
-    session: requests.Session, conn: psycopg2.extensions.connection
+    session: requests.Session, conn: psycopg2.extensions.connection, run_id,
 ) -> list:
 
     url = "https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json"
@@ -18,6 +19,16 @@ def ingest_senadores(
     resp.raise_for_status()
 
     data = resp.json()
+
+    save_raw_payload(
+    conn=conn,
+    entity_type="senators",
+    source_name="senado_legislativo",
+    source_url=url,
+    payload=data,
+    run_id=run_id,
+    http_status=resp.status_code,
+    )
 
     parlamentares = (
         data.get("ListaParlamentarEmExercicio", {})

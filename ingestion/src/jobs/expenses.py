@@ -1,23 +1,36 @@
 import datetime
 import logging
-
 import psycopg2
 import requests
 from psycopg2.extras import execute_batch, execute_values
+from bronze.raw import save_raw_payload
+
 
 logger = logging.getLogger("inflow_ingestor")
 
 
-def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.connection, ano: int):
+def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.connection, ano: int, run_id):
     url = f"https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/despesas_ceaps/{ano}"
     logger.info(
         "Iniciando ingestão de despesas da CEAPS para o ano de %d a partir de: %s",
         ano,
         url,
+        
     )
     resp = session.get(url, timeout=120)
     resp.raise_for_status()
     despesas_raw = resp.json()
+
+    save_raw_payload(
+    conn=conn,
+    entity_type="expenses",
+    source_name="senado_ceaps",
+    source_url=url,
+    payload=despesas_raw,
+    run_id=run_id,
+    http_status=resp.status_code,
+    ingestion_year=ano,
+)
 
     if not isinstance(despesas_raw, list):
         logger.warning("Formato inesperado na resposta de despesas da CEAPS.")

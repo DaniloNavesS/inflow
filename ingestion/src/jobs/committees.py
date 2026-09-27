@@ -4,12 +4,13 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_batch
 from config import LIMIT_SENADORES
+from bronze.raw import save_raw_payload
 
 logger = logging.getLogger("inflow_ingestor")
 
 
 def ingest_comissoes_e_participacoes(
-    session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list
+    session: requests.Session, conn: psycopg2.extensions.connection, senador_ids: list, run_id
 ):
 
     logger.info(
@@ -33,6 +34,16 @@ def ingest_comissoes_e_participacoes(
 
             if resp.status_code == 200:
                 data = resp.json()
+
+                save_raw_payload(
+                conn=conn,
+                entity_type="committees",
+                source_name="senado_legislativo",
+                source_url=url,
+                payload=data,
+                run_id=run_id,
+                http_status=resp.status_code,
+                )
 
                 comissoes_data = (
                     data.get("MembroComissaoParlamentar", {})
