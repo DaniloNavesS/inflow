@@ -10,12 +10,17 @@ services:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Inicialização do banco
+      - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-inflow_user} -d ${POSTGRES_DB:-inflow_db}"
+        ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 5s
     restart: unless-stopped
     networks:
@@ -24,7 +29,7 @@ services:
   ingestor:
     container_name: inflow_ingestor
     build:
-      context: ./ingestor
+      context: ./ingestion
       dockerfile: Dockerfile
     environment:
       DB_HOST: postgres
@@ -44,6 +49,7 @@ services:
 volumes:
   postgres_data:
     name: inflow_postgres_data
+
 
 networks:
   inflow_network:

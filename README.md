@@ -32,7 +32,7 @@ Guia rápido para inicializar o banco de dados PostgreSQL e executar a carga aut
 
 ---
 
-## 🌱 Carga de Dados (Seed)
+## Carga de Dados (Seed)
 
 O processo de **Seed** consome diretamente as APIs públicas do Senado Federal, trata os dados em memória e realiza o *upsert* idempotente no PostgreSQL.
 
