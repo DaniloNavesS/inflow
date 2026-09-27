@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11.14-slim-bookworm
 
 # Evita geração de bytecode .pyc e força flush imediato dos logs
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia código do ingestor
-COPY main.py .
+COPY *.py .
 
 # Comando padrão de execução
 CMD ["python", "main.py"]
