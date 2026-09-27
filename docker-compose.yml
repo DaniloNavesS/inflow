@@ -10,8 +10,8 @@ services:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Inicialização do banco
       - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
     healthcheck:
       test:
         [
