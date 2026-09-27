@@ -6,7 +6,7 @@ import styles from './index.module.css';
 
 const chapters = [
   {number: '01', title: 'Escopo e perguntas', description: 'As perguntas válidas, o recorte e a situação de implementação da E1.', path: '/docs/escopo-e-perguntas', tag: 'O ponto de partida'},
-  {number: '02', title: 'Dos dados ao modelo', description: 'As relações entre senadores, histórico, despesas, fornecedores e presença.', path: '/docs/modelagem-e-qualidade', tag: 'A estrutura'},
+  {number: '02', title: 'Dos dados ao modelo', description: 'As relações entre senadores, histórico, despesas, fornecedores e presença.', path: '/docs/arquitetura-pipeline', tag: 'A estrutura'},
   {number: '03', title: 'Fontes verificadas', description: 'APIs, endpoints e documentos oficiais usados na carga.', path: '/docs/fontes-e-endpoints', tag: 'A rastreabilidade'},
 ];
 

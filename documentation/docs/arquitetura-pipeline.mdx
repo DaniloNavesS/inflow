@@ -44,7 +44,7 @@ antes das participações em comissões, das despesas, da presença e da estrutu
 
 O orquestrador ainda contém o job legado `sessions`, baseado em ocorrências de votação. Ele não é
 fonte válida para medir assiduidade e não integra o contrato-alvo de presença. A fonte oficial para
-esse domínio é o DSF, conforme detalhado em [Presença via DSF](./presenca-dsf).
+esse domínio é o DSF, conforme detalhado em [Presença via DSF](./metrics/presenca-dsf.mdx).
 
 ## Persistência
 
@@ -157,6 +157,6 @@ ingestion/src/
 
 As definições de banco ficam em `scripts/sql/`, separadas pelos schemas `bronze`, `oltp` e
 `monitoring`. A justificativa do modelo e de seus compromissos está no
-[Registro de ADR](./registro-de-adr); fontes e contratos de dados estão em
-[Fontes e endpoints](./fontes-e-endpoints); e as validações estão descritas em
-[Modelagem e qualidade](./modelagem-e-qualidade).
+[Registro de ADR](./adr/modelagem-do-sistema-de-origem); fontes e contratos de dados estão
+em [Fontes e endpoints](./fontes-e-endpoints); e as medições estão registradas em
+[Carga de trabalho](./metrics/workload).
