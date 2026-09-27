@@ -26,7 +26,7 @@ build-ingestion:
 ingestion: up
 	$(COMPOSE) run --rm ingestion
 
-test: up
+test: ingestion
 	$(COMPOSE) run --rm ingestion pytest -q -p no:cacheprovider /tests
 
 docs:
@@ -39,4 +39,3 @@ db-shell: up
 	$(COMPOSE) exec postgres psql \
 		-U $${POSTGRES_USER:-inflow_user} \
 		-d $${POSTGRES_DB:-inflow_db}
-

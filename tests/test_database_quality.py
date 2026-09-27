@@ -86,3 +86,20 @@ def test_natural_keys_support_idempotent_reprocessing(db):
             FROM mandatos GROUP BY 1,2 HAVING count(*) > 1
         ) duplicates
     """) == 0
+
+
+def test_pipeline_monitoring(db):
+    assert scalar(db, "SELECT to_regclass('monitoring.pipeline_runs') IS NOT NULL")
+    assert scalar(db, "SELECT to_regclass('monitoring.job_runs') IS NOT NULL")
+    assert scalar(db, """
+        SELECT count(*)
+        FROM monitoring.pipeline_runs
+        WHERE status = 'success' AND finished_at IS NOT NULL
+    """) >= 1
+    assert scalar(db, """
+        SELECT count(*)
+        FROM monitoring.job_runs
+        WHERE status = 'success'
+          AND finished_at IS NOT NULL
+          AND records_after >= records_before
+    """) >= 6

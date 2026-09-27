@@ -105,11 +105,11 @@ def execute_monitored_job(
                    SET finished_at = CURRENT_TIMESTAMP,
                        duration_seconds = %s,
                        status = 'failed',
+                       records_after = %s,
                        error_message = %s
                  WHERE id = %s
                 """,
-                (time.perf_counter() - started_at, str(error), job_id),
+                (time.perf_counter() - started_at, before, str(error), job_id),
             )
         connection.commit()
         raise
-
