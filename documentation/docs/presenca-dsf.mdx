@@ -1,0 +1,33 @@
+---
+sidebar_position: 4
+title: Presença via DSF
+---
+
+# Prova de viabilidade
+
+O [tutorial oficial do Senado](https://www12.senado.leg.br/assessoria-de-imprensa/tutorial-de-verificacao-da-assiduidade-dos-senadores)
+orienta usar as listas publicadas no Diário do Senado Federal. Elas existem para sessões
+deliberativas e separam comparecimento de voto.
+
+| Sessão | Data | DSF/publicação | Páginas | Total oficial | Extraído | Falhas de linha |
+|---|---|---|---:|---:|---:|---:|
+| 149ª Deliberativa Ordinária Semipresencial | 10/10/2023 | DSF 178, código 113837, 11/10/2023 | 76–77 | 75 | 75 | 0 |
+| 152ª Deliberativa Ordinária | 17/10/2023 | DSF 181, código 113894, 18/10/2023 | 106–107 | 70 | 70 | 0 |
+| 159ª Deliberativa Ordinária | 24/10/2023 | DSF 186, código 113913, 25/10/2023 | 90–91 | 75 | 75 | 0 |
+
+Foram conferidos manualmente registros no início, meio e fim de cada lista, incluindo linhas com
+presença sem voto. Os nomes, partido, UF e marca de voto coincidiram com o PDF. A execução completa
+registra separadamente quantos nomes não puderam ser resolvidos contra `senadores`.
+
+## Regras
+
+1. Somente uma marca de presença na lista do DSF gera `PRESENTE`.
+2. A coluna de voto vai para `voto_registrado`; não votar não significa ausência.
+3. Falha de download ou parser fica no documento como `FALHA` ou `PARCIAL`.
+4. Nome não resolvido não é atribuído por aproximação; `senador_id` fica nulo.
+5. A falta de uma linha nunca cria automaticamente um registro de ausência.
+6. Licenças e justificativas só entram com fonte e página próprias em `licenca_justificativa`.
+
+O fluxo mínimo baixa apenas as páginas da lista, calcula SHA-256, guarda URL e intervalo de páginas,
+extrai as linhas e faz upsert pelas chaves documentais. A cobertura de três datas prova o método,
+mas ainda não representa a assiduidade de uma legislatura.

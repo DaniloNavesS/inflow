@@ -54,6 +54,8 @@ services:
     build:
       context: ./ingestor
       dockerfile: Dockerfile
+    volumes:
+      - ./tests:/tests:ro
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -62,6 +64,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
       INGESTION_YEAR: ${INGESTION_YEAR:-2024}
       LIMIT_SENADORES: ${LIMIT_SENADORES:-0}
+      LEGISLATURE: ${LEGISLATURE:-57}
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +73,16 @@ services:
     networks:
       - inflow_network
     restart: "no"
+
+  docs:
+    profiles: ["docs"]
+    container_name: inflow_docs
+    build:
+      context: ./documentation
+      dockerfile: Dockerfile
+    ports:
+      - "${DOCS_PORT:-3000}:80"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

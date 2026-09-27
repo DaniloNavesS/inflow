@@ -1,0 +1,33 @@
+---
+sidebar_position: 5
+title: Modelagem e qualidade
+---
+
+# Modelo transacional
+
+As migrações rodam em ordem e separam os fatos do domínio:
+
+- `senadores` guarda o cadastro; valores atuais não substituem o histórico.
+- `mandatos`, `exercicios_mandato` e `filiacoes_partidarias` preservam intervalos de validade.
+- `despesas` referencia `fornecedores` por PK própria.
+- `sessao_plenaria` identifica a sessão; `documento_dsf` registra a evidência;
+  `registro_presenca` guarda a linha extraída; `licenca_justificativa` guarda justificativas
+  somente quando houver fonte explícita.
+
+Partido e UF nulos significam desconhecido. O ingestor não usa `S/PART` ou `DF` como preenchimento.
+
+## Testes
+
+A suíte cobre:
+
+- esquema e remoção das tabelas antigas que confundiam voto com presença;
+- volume mínimo de senadores, despesas, sessões e presenças;
+- distribuição por sessão e estado do parser;
+- identidade e distribuição de fornecedores;
+- integridade referencial;
+- unicidade das chaves de reprocessamento;
+- regras unitárias de documento ausente, CPF mascarado e separação presença/voto.
+
+Execute `docker compose up --build` e depois
+`docker compose run --rm ingestor pytest -q -p no:cacheprovider /tests`.
+A imagem usa Python 3.11.14 e todas as dependências estão fixadas por versão.
