@@ -6,14 +6,14 @@
 
 ## Contexto
 
-A origem são quatro APIs públicas do Senado Federal: lista de parlamentares em exercício,
-comissões por parlamentar, votações nominais e despesas da cota parlamentar (CEAPS), mais
-recursos utilizados por gabinete.
+A origem combina APIs públicas do Senado Federal (cadastro por legislatura, mandatos,
+exercícios, filiações, comissões, CEAPS e recursos de gabinete) com o Diário do Senado
+Federal (DSF), fonte documental oficial das listas de comparecimento.
 
-Nenhuma delas expõe histórico. Todas devolvem **o estado atual** do recurso: `senador/lista/atual.json`
-só traz quem está em exercício; `despesas_ceaps/{ano}` devolve o ano inteiro reprocessado a cada
-consulta, incluindo lançamentos corrigidos ou glosados depois do fato. Não há `updated_at`, versão,
-nem endpoint de alterações. A origem é, portanto, **CRUD: sobrescreve**.
+A origem é híbrida. CEAPS devolve o ano inteiro reprocessado e pode sobrescrever correções, mas
+`senador/{codigo}/mandatos` e `senador/{codigo}/filiacoes` expõem intervalos históricos. O DSF é
+publicado como documento imutável e precisa ser rastreado por código, URL, páginas e hash. O modelo
+preserva o histórico que a fonte fornece e aplica upsert apenas aos retratos reprocessados.
 
 Carga de trabalho medida (detalhe em [`docs/workload.md`](../workload.md)):
 
@@ -22,7 +22,7 @@ Carga de trabalho medida (detalhe em [`docs/workload.md`](../workload.md)):
 | `despesas` | 21.430 | 13 MB |
 | `participacoes_comissao` | 7.189 | 1,4 MB |
 | `fornecedores` | 3.516 | 944 kB |
-| `sessoes_presenca` | 1.086 | 384 kB |
+| `registro_presenca` (prova) | 220 | não medido |
 
 Escrita em lote (~33 mil linhas em 90 s, uma vez por dia no pior caso) contra leitura analítica
 frequente. Cardinalidade baixa nas colunas de filtro: 88 senadores, 8 tipos de despesa, 469 datas
@@ -59,15 +59,28 @@ dados reais de 2024 (`INGESTION_YEAR=2024`).
 - **Restrições barram lixo da origem:** `valor` negativo, UF inexistente e `data_fim < data_inicio`
   são rejeitados; o ingestor normaliza esses casos antes do insert.
 
-Normalizar `fornecedores` em tabela própria trocou 21.430 repetições de razão social por 3.516
-linhas, e é o que permite a pergunta "quais fornecedores atendem a mais de um senador".
+Normalizar `fornecedores` em tabela própria permite responder quanto cada entidade recebeu e de
+quais senadores. CNPJ e CPF completos são chaves fortes; CPF mascarado usa documento mais nome
+normalizado; documento ausente usa nome mais identificador da despesa. Assim, ausências de documento
+não são colapsadas numa entidade genérica.
+
+### Presença não é voto
+
+Votação nominal foi rejeitada como fonte de assiduidade. Um senador pode comparecer e não votar,
+ou registrar uma ocorrência de votação que não descreve a presença na sessão inteira. A fonte de
+presença escolhida é a seção **Registro de Comparecimento e Voto** (ou **Registro de
+Comparecimento**) do DSF, conforme o tutorial oficial do Senado.
+
+Cada registro mantém `documento_dsf_id` e página. O voto é um booleano separado e nunca determina
+a presença. Falha do parser fica em `documento_dsf.status_parser`; nome ambíguo fica sem
+`senador_id`. Ausência de linha, ausência de voto ou falha de extração nunca gera uma ausência.
 
 ## Decisão
 
 Espelhamos a origem em **modelo CRUD normalizado** (7 tabelas, 3FN), com `ON CONFLICT DO UPDATE`
 pela chave natural do Senado, e guardamos **três carimbos de tempo com papéis distintos**:
 
-- **tempo de evento** — `despesas.data_despesa`, `sessoes.data_sessao`, `participacoes_comissao.data_inicio`:
+- **tempo de evento** — `despesas.data_despesa`, `sessao_plenaria.data_sessao`, `participacoes_comissao.data_inicio`:
   quando o fato ocorreu no mundo. É o eixo de qualquer análise temporal.
 - **tempo de ingestão** — `timestamp_ingestao`: quando a linha entrou no banco. Imutável.
 - **tempo de processamento** — `atualizado_em`, mantido por trigger: quando o ingestor tocou a linha
@@ -88,10 +101,10 @@ após a segunda carga, `atualizado_em > timestamp_ingestao` em 21.430 de 21.430 
 `atualizado_em` hoje marca "o ingestor passou aqui", não "a origem mudou". Tornar o UPDATE
 condicional (`WHERE valor IS DISTINCT FROM EXCLUDED.valor OR ...`) é pré-requisito do CDC da E2.
 
-**Perdas.** Correções retroativas da origem são **perdidas**: se um lançamento de R$ 10.000 vira
+**Perdas.** Correções retroativas da CEAPS são **perdidas**: se um lançamento de R$ 10.000 vira
 R$ 8.000, sobrescrevemos e a versão antiga desaparece. Perdemos também quem saiu do exercício —
-`senador/lista/atual.json` só traz os atuais, e os 15 senadores extras na tabela (96 contra 81)
-entraram apenas porque apareceram nas despesas, com `partido`/`uf` de preenchimento.
+quando nem a lista por legislatura nem os endpoints históricos registrarem a pessoa. Partido e UF
+desconhecidos ficam nulos; não se fabrica `S/PART` nem `DF`.
 
 **Irreversibilidade.** Nenhuma estrutural: o esquema sobe do zero por migrações. Mas o histórico
 não capturado entre hoje e a implantação do CDC é **irrecuperável** — a origem não o guarda.

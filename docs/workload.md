@@ -17,9 +17,9 @@ Ambiente medido: PostgreSQL 15-alpine, `INGESTION_YEAR=2024`, medição de 26/09
 | `despesas` | 21.430 | 13 MB | +1 ano de CEAPS ≈ +21 mil linhas |
 | `participacoes_comissao` | 7.189 | 1.384 kB | estável por legislatura |
 | `fornecedores` | 3.516 | 944 kB | ~3,5 mil novos por ano, com sobreposição |
-| `sessoes_presenca` | 1.086 | 384 kB | limitado a 30 votações por senador na carga atual |
+| `registro_presenca` | 220 | a medir | prova mínima em 3 sessões deliberativas do DSF |
 | `comissoes` | 425 | 136 kB | dezenas por legislatura |
-| `sessoes` | 190 | 72 kB | ~100 sessões deliberativas por ano |
+| `sessao_plenaria` | 3 | a medir | ~100 sessões deliberativas por ano |
 | `senadores` | 96 | 120 kB | +1/3 do Senado a cada 4 anos |
 | `estrutura_gabinete` | 81 | 40 kB | 81 linhas por ano |
 
@@ -112,7 +112,7 @@ Constatado nesta medição, e relevante para as transformações posteriores:
 
 - **4 lançamentos com data anterior a 2000** (o menor é `0202-07-04`): erro de digitação na fonte.
   Preservados como estão no espelho transacional.
-- **96 senadores na tabela para 81 em exercício:** 15 entraram apenas por aparecerem nas despesas,
-  com `partido` e `uf` de preenchimento, porque `senador/lista/atual.json` só devolve os atuais.
-- **`SEM_DOCUMENTO` como CNPJ/CPF:** lançamentos sem documento do fornecedor são agrupados sob essa
-  chave sintética, para não violar o `NOT NULL UNIQUE` de `fornecedores.cnpj_cpf`.
+- Senadores históricos são carregados pela lista da 57ª Legislatura; partido e UF desconhecidos
+  permanecem nulos, sem preenchimentos artificiais.
+- Fornecedores sem documento recebem identidade por nome normalizado mais lançamento. A estratégia
+  evita colapsar pessoas distintas e sacrifica deduplicação automática onde a origem não sustenta isso.
