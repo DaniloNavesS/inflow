@@ -4,6 +4,7 @@ import time
 from clients.senate import get_resilient_session
 from config import INGESTION_YEAR
 from database.postgres import wait_for_database
+from jobs.attendance import ingest_dsf_attendance
 from jobs.committees import ingest_comissoes_e_participacoes
 from jobs.expenses import ingest_ceaps_despesas
 from jobs.senators import ingest_senadores
@@ -123,7 +124,18 @@ def main():
             run_id,
         )
 
-        # 4. CEAPS
+        # 4. Presença oficial extraída do Diário do Senado Federal
+        execute_monitored_job(
+            conn,
+            run_id,
+            "dsf_attendance",
+            ingest_dsf_attendance,
+            session,
+            conn,
+            run_id,
+        )
+
+        # 5. CEAPS
         execute_monitored_job(
             conn,
             run_id,
@@ -135,7 +147,7 @@ def main():
             run_id,
         )
 
-        # 5. Estrutura de Gabinete
+        # 6. Estrutura de Gabinete
         execute_monitored_job(
             conn,
             run_id,

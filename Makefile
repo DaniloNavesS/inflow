@@ -1,9 +1,3 @@
-COMPOSE := docker compose
-
-.PHONY: up down stop restart ps logs build-ingestion ingestion test docs docs-build db-shell
-
-up:
-	$(COMPOSE) up -d postgres migrate
 COMPOSE=docker compose
 
 .PHONY: up down stop restart ps logs ingestion build-ingestion db-shell clean
@@ -40,18 +34,6 @@ docs:
 
 docs-build:
 	$(COMPOSE) --profile docs build docs
-
-db-shell: up
-	$(COMPOSE) exec postgres psql \
-		-U $${POSTGRES_USER:-inflow_user} \
-		-d $${POSTGRES_DB:-inflow_db}
-	$(COMPOSE) logs -f postgres
-
-build-ingestion:
-	$(COMPOSE) build ingestor
-
-ingestion:
-	$(COMPOSE) run --rm ingestor
 
 db-shell:
 	$(COMPOSE) exec postgres \

@@ -17,21 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia os módulos do pipeline
-COPY . .
-
-# Comando padrão de execução
-CMD ["python", "main.py"]
-# Dependências Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copia todo o código modularizado
+# Copia apenas a implementação canônica do pipeline
 COPY src/ ./src/
 
-# Executa a partir da pasta src para preservar imports como:
-# from config import ...
-# from clients.senate import ...
+# Executa a partir de src para preservar os imports dos módulos do pipeline
 WORKDIR /app/src
-
 CMD ["python", "main.py"]

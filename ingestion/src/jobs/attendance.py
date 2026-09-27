@@ -106,7 +106,7 @@ def resolve_senator(name: str, senators_by_name: dict[str, set[int]]) -> tuple[i
 
 def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[dict]:
     with conn.cursor() as cur:
-        cur.execute("SELECT id, nome, nome_completo FROM senadores")
+        cur.execute("SELECT id, nome, nome_completo FROM oltp.senadores")
         senators_by_name: dict[str, set[int]] = {}
         for senator_id, short_name, full_name in cur.fetchall():
             for value in (short_name, full_name):
@@ -143,7 +143,7 @@ def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[di
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO sessao_plenaria
+                INSERT INTO oltp.sessao_plenaria
                     (numero, data_sessao, tipo, legislatura, sessao_legislativa)
                 VALUES (%s, %s, %s, 57, 1)
                 ON CONFLICT (numero, data_sessao) DO UPDATE SET tipo = EXCLUDED.tipo
@@ -154,7 +154,7 @@ def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[di
             session_id = cur.fetchone()[0]
             cur.execute(
                 """
-                INSERT INTO documento_dsf
+                INSERT INTO oltp.documento_dsf
                     (sessao_id, codigo_diario, numero_diario, data_publicacao,
                      url_documento, pagina_inicial, pagina_final, sha256,
                      status_parser, mensagem_parser)
@@ -176,7 +176,7 @@ def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[di
             for row, (senator_id, resolution) in zip(rows, resolved):
                 cur.execute(
                     """
-                    INSERT INTO registro_presenca
+                    INSERT INTO oltp.registro_presenca
                         (sessao_id, documento_dsf_id, senador_id, nome_documento,
                          partido_documento, uf_documento, situacao, voto_registrado,
                          pagina, resolucao)

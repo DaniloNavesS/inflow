@@ -5,9 +5,9 @@ from pathlib import Path
 import psycopg2
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "ingestion"))
-if Path("/app").is_dir():
-    sys.path.insert(0, "/app")
+sys.path.insert(0, str(Path(__file__).parents[1] / "ingestion" / "src"))
+if Path("/app/src").is_dir():
+    sys.path.insert(0, "/app/src")
 
 
 @pytest.fixture(scope="session")
@@ -23,5 +23,7 @@ def db():
         )
     except psycopg2.OperationalError as exc:
         pytest.skip(f"PostgreSQL de integração indisponível: {exc}")
+    with connection.cursor() as cursor:
+        cursor.execute("SET search_path TO oltp, public")
     yield connection
     connection.close()

@@ -22,15 +22,16 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
     despesas_raw = resp.json()
 
     save_raw_payload(
-    conn=conn,
-    entity_type="expenses",
-    source_name="senado_ceaps",
-    source_url=url,
-    payload=despesas_raw,
-    run_id=run_id,
-    http_status=resp.status_code,
-    ingestion_year=ano,
-)
+        conn,
+        entity_type="expenses",
+        source_name="senado_ceaps",
+        source_url=url,
+        payload_json=despesas_raw,
+        media_type="application/json",
+        run_id=run_id,
+        http_status=resp.status_code,
+        ingestion_year=ano,
+    )
 
     if not isinstance(despesas_raw, list):
         logger.warning("Formato inesperado na resposta de despesas da CEAPS.")

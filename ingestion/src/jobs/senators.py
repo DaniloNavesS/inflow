@@ -21,13 +21,14 @@ def ingest_senadores(
     data = resp.json()
 
     save_raw_payload(
-    conn=conn,
-    entity_type="senators",
-    source_name="senado_legislativo",
-    source_url=url,
-    payload=data,
-    run_id=run_id,
-    http_status=resp.status_code,
+        conn,
+        entity_type="senators",
+        source_name="senado_legislativo",
+        source_url=url,
+        payload_json=data,
+        media_type="application/json",
+        run_id=run_id,
+        http_status=resp.status_code,
     )
 
     parlamentares = (

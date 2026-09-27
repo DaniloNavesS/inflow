@@ -35,14 +35,15 @@ def ingest_estrutura_gabinete(
                 payload = resp.json()
 
                 save_raw_payload(
-                conn=conn,
-                entity_type="staff",
-                source_name="senado_administrativo",
-                source_url=url,
-                payload=payload,
-                run_id=run_id,
-                http_status=resp.status_code,
-                ingestion_year=ano,
+                    conn,
+                    entity_type="staff",
+                    source_name="senado_administrativo",
+                    source_url=url,
+                    payload_json=payload,
+                    media_type="application/json",
+                    run_id=run_id,
+                    http_status=resp.status_code,
+                    ingestion_year=ano,
                 )
 
                 data_list = payload.get("data", [])

@@ -12,6 +12,9 @@ def log_database_summary(conn: psycopg2.extensions.connection):
         "oltp.comissoes",
         "oltp.participacoes_comissao",
         "oltp.sessoes_presenca",
+        "oltp.sessao_plenaria",
+        "oltp.documento_dsf",
+        "oltp.registro_presenca",
         "oltp.fornecedores",
         "oltp.despesas",
         "oltp.estrutura_gabinete"

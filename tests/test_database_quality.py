@@ -14,7 +14,7 @@ def scalar(db, sql):
 
 def test_schema(db):
     with db.cursor() as cursor:
-        cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'oltp'")
         actual = {row[0] for row in cursor.fetchall()}
     assert EXPECTED_TABLES <= actual
     assert "sessoes_presenca" not in actual
@@ -106,13 +106,14 @@ def test_pipeline_monitoring(db):
 
 
 def test_bronze_preserves_json_and_pdf_without_duplicates(db):
-    assert scalar(db, "SELECT to_regclass('bronze.payloads_brutos') IS NOT NULL")
-    assert scalar(db, "SELECT count(*) FROM bronze.payloads_brutos WHERE payload_json IS NOT NULL") > 0
-    assert scalar(db, "SELECT count(*) FROM bronze.payloads_brutos WHERE payload_binario IS NOT NULL") >= 3
+    assert scalar(db, "SELECT to_regclass('bronze.raw_payloads') IS NOT NULL")
+    assert scalar(db, "SELECT count(*) FROM bronze.raw_payloads WHERE payload IS NOT NULL") > 0
+    assert scalar(db, "SELECT count(*) FROM bronze.raw_payloads WHERE payload_binary IS NOT NULL") >= 3
     assert scalar(db, """
         SELECT count(*) FROM (
-            SELECT url_fonte, sha256
-            FROM bronze.payloads_brutos
+            SELECT source_url, content_sha256
+            FROM bronze.raw_payloads
+            WHERE content_sha256 IS NOT NULL
             GROUP BY 1, 2 HAVING count(*) > 1
         ) duplicados
     """) == 0
