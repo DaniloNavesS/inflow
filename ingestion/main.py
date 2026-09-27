@@ -6,16 +6,13 @@ import time
 from clients.senate import get_resilient_session
 from config import INGESTION_YEAR
 from database.postgres import wait_for_database
-from jobs.loaders import (
-    ingest_ceaps_despesas,
-    ingest_comissoes_e_participacoes,
-    ingest_estrutura_gabinete,
-    ingest_historico_parlamentar,
-    ingest_senadores,
-    ingest_sessoes_presenca,
-    log_database_summary,
-)
+from jobs.committees import ingest_comissoes_e_participacoes
+from jobs.expenses import ingest_ceaps_despesas
+from jobs.senators import ingest_historico_parlamentar, ingest_senadores
+from jobs.sessions import ingest_sessoes_presenca
+from jobs.staff import ingest_estrutura_gabinete
 from monitoring.metrics import execute_monitored_job, finish_pipeline, start_pipeline
+from monitoring.summary import log_database_summary
 
 
 logging.basicConfig(
