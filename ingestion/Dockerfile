@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia código do ingestor
-COPY *.py .
+# Copia os módulos do pipeline
+COPY . .
 
 # Comando padrão de execução
 CMD ["python", "main.py"]

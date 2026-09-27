@@ -5,7 +5,7 @@ from pathlib import Path
 import psycopg2
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "ingestor"))
+sys.path.insert(0, str(Path(__file__).parents[1] / "ingestion"))
 if Path("/app").is_dir():
     sys.path.insert(0, "/app")
 

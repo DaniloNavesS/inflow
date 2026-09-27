@@ -9,18 +9,17 @@ Responsável por:
 3. Carregar e realizar upsert no banco relacional PostgreSQL (OLTP).
 """
 
-import os
 import sys
 import time
-import ssl
 import logging
 import datetime
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import psycopg2
 from psycopg2.extras import execute_batch, execute_values
 from attendance import ingest_dsf_attendance
+from clients.senate import get_resilient_session
+from config import INGESTION_YEAR, LEGISLATURE, LIMIT_SENADORES
+from database.postgres import wait_for_database
 from domain import supplier_identity
 
 # -----------------------------------------------------------------------------
@@ -32,79 +31,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-logger = logging.getLogger("inflow_ingestor")
-
-# -----------------------------------------------------------------------------
-# Configurações de Ambiente
-# -----------------------------------------------------------------------------
-DB_HOST = os.getenv("DB_HOST", "postgres")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_NAME = os.getenv("DB_NAME", "inflow_db")
-DB_USER = os.getenv("DB_USER", "inflow_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "inflow_pass")
-
-INGESTION_YEAR = int(os.getenv("INGESTION_YEAR", "2024"))
-LIMIT_SENADORES = int(os.getenv("LIMIT_SENADORES", "0"))  # 0 para processar todos
-LEGISLATURE = int(os.getenv("LEGISLATURE", "57"))
-
-# Headers HTTP padrão aceitos por WAFs e proxies governamentais
-REQUEST_HEADERS = {
-    "Accept": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-}
-
-# -----------------------------------------------------------------------------
-# Sessão HTTP Resiliente com Políticas de Retry e Adaptação TLS
-# -----------------------------------------------------------------------------
-class SenateTLSAdapter(HTTPAdapter):
-    """
-    Adapter customizado para garantir compatibilidade TLS 1.2 com os servidores
-    e firewalls do Senado Federal, evitando timeouts de negociação TLS 1.3 do OpenSSL 3.
-    """
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.maximum_version = ssl.TLSVersion.TLSv1_2
-        kwargs['ssl_context'] = ctx
-        return super().init_poolmanager(*args, **kwargs)
-
-def get_resilient_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(REQUEST_HEADERS)
-    retries = Retry(
-        total=5,
-        backoff_factor=1.5,
-        status_forcelist=[429, 500, 502, 503, 504],
-        raise_on_status=False
-    )
-    adapter = SenateTLSAdapter(max_retries=retries, pool_connections=10, pool_maxsize=10)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
-
-# -----------------------------------------------------------------------------
-# Conexão com o Banco de Dados com Backoff Exponencial
-# -----------------------------------------------------------------------------
-def wait_for_database(max_attempts: int = 30, delay_seconds: int = 2) -> psycopg2.extensions.connection:
-    logger.info("Aguardando disponibilidade do banco de dados PostgreSQL...")
-    for attempt in range(1, max_attempts + 1):
-        try:
-            conn = psycopg2.connect(
-                host=DB_HOST,
-                port=DB_PORT,
-                dbname=DB_NAME,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                connect_timeout=5
-            )
-            conn.autocommit = False
-            logger.info("Conexão com PostgreSQL estabelecida com sucesso!")
-            return conn
-        except psycopg2.OperationalError as e:
-            logger.warning("PostgreSQL indisponível na tentativa %d/%d: %s", attempt, max_attempts, e)
-            time.sleep(delay_seconds)
-    
-    logger.error("Falha crítica: impossível conectar ao PostgreSQL após múltiplas tentativas.")
-    sys.exit(1)
+logger = logging.getLogger("inflow_ingestion")
 
 # -----------------------------------------------------------------------------
 # Etapa 1: Ingestão de Senadores

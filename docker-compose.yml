@@ -49,10 +49,10 @@ services:
       - inflow_network
     restart: "no"
 
-  ingestor:
-    container_name: inflow_ingestor
+  ingestion:
+    container_name: inflow_ingestion
     build:
-      context: ./ingestor
+      context: ./ingestion
       dockerfile: Dockerfile
     volumes:
       - ./tests:/tests:ro

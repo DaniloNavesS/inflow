@@ -16,13 +16,13 @@ O comando cria o PostgreSQL, aplica as migrações em ordem e carrega dados púb
 reprocessar sem recriar o banco:
 
 ```bash
-docker compose run --rm ingestor
+docker compose run --rm ingestion
 ```
 
 ## Testar
 
 ```bash
-docker compose run --rm ingestor pytest -q -p no:cacheprovider /tests
+docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests
 ```
 
 O banco fica disponível em `localhost:5433`, database `inflow_db`, usuário `inflow_user` e senha
