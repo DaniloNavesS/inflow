@@ -1,4 +1,6 @@
-# 0001 — Espelhamos a origem em modelo CRUD normalizado, com carimbo de ingestão próprio
+# ADR 0002: Modelagem do sistema de origem
+
+## Decisão: espelhamos a origem em modelo CRUD normalizado, com carimbo de ingestão próprio
 
 - **Status:** aceita
 - **Data:** 2026-09-26
@@ -15,7 +17,7 @@ A origem é híbrida. CEAPS devolve o ano inteiro reprocessado e pode sobrescrev
 publicado como documento imutável e precisa ser rastreado por código, URL, páginas e hash. O modelo
 preserva o histórico que a fonte fornece e aplica upsert apenas aos retratos reprocessados.
 
-Carga de trabalho medida (detalhe em [`docs/workload.md`](../workload.md)):
+Carga de trabalho medida (detalhe em [`docs/workload.md`](../metrics/workload.md)):
 
 | Tabela | Linhas | Tamanho |
 |---|---|---|
@@ -30,17 +32,18 @@ distintas. Latência tolerada: segundos.
 
 ## Alternativas consideradas
 
-**A. Opção nula — consultar a API sob demanda, sem banco.**
-Zero modelagem e zero carga. Descartada: a agregação por senador × tipo × período exige varrer
-21 mil lançamentos a cada pergunta, a API não aceita filtro por senador no endpoint de CEAPS, e
-sem persistência não há como detectar que um lançamento mudou de valor — o que inviabiliza a E2.
+**A. Consulta sob demanda, sem banco.**
+Essa alternativa não exige modelagem nem carga. Foi descartada porque a agregação por senador ×
+tipo × período exigiria varrer 21 mil lançamentos a cada pergunta. A API não aceita filtro por senador
+no endpoint de CEAPS, e sem persistência não é possível detectar quando o valor de um lançamento muda.
+Isso inviabiliza a E2.
 
 **B. Insert-only / append, com versionamento de linha.**
 Cada resposta da API gera uma nova versão da linha; a leitura pega a mais recente. Preserva o
 histórico de correções que a origem apaga, o que é justamente a informação interessante do domínio.
 Descartada **para a E1**: a origem reprocessa o ano inteiro a cada chamada, então sem comparação
 campo a campo cada execução geraria 21 mil versões idênticas. Fazer isso direito é o problema da
-E2 (CDC) e depende de um estado anterior confiável — que é o que esta entrega constrói.
+E2 (CDC) e depende de um estado anterior confiável, construído nesta entrega.
 
 **C. Espelhar a origem em CRUD normalizado, com upsert idempotente (escolhida).**
 Uma linha por entidade da origem, chaveada pelo identificador oficial (`CodigoParlamentar`,
@@ -66,10 +69,15 @@ não são colapsadas numa entidade genérica.
 
 ### Presença não é voto
 
-Votação nominal foi rejeitada como fonte de assiduidade. Um senador pode comparecer e não votar,
-ou registrar uma ocorrência de votação que não descreve a presença na sessão inteira. A fonte de
-presença escolhida é a seção **Registro de Comparecimento e Voto** (ou **Registro de
-Comparecimento**) do DSF, conforme o tutorial oficial do Senado.
+Durante a avaliação da cobertura das APIs do Senado, Yan Guimarães testou os endpoints públicos
+para verificar se respondiam às perguntas de gestão. Os testes identificaram lacunas nas perguntas 5,
+6 e 10, que dependem de dados de comparecimento. A partir dessa constatação, o squad avaliou o DSF
+como fonte documental oficial para presença.
+
+Votação nominal não é fonte suficiente para medir assiduidade. Um senador pode comparecer sem votar,
+e um registro de voto não representa a presença durante toda a sessão. Por isso, a fonte escolhida é a
+seção **Registro de Comparecimento e Voto** (ou **Registro de Comparecimento**) do DSF, conforme o
+tutorial oficial do Senado.
 
 Cada registro mantém `documento_dsf_id` e página. O voto é um booleano separado e nunca determina
 a presença. Falha do parser fica em `documento_dsf.status_parser`; nome ambíguo fica sem
@@ -80,11 +88,12 @@ a presença. Falha do parser fica em `documento_dsf.status_parser`; nome ambígu
 Espelhamos a origem em **modelo CRUD normalizado** (7 tabelas, 3FN), com `ON CONFLICT DO UPDATE`
 pela chave natural do Senado, e guardamos **três carimbos de tempo com papéis distintos**:
 
-- **tempo de evento** — `despesas.data_despesa`, `sessao_plenaria.data_sessao`, `participacoes_comissao.data_inicio`:
-  quando o fato ocorreu no mundo. É o eixo de qualquer análise temporal.
-- **tempo de ingestão** — `timestamp_ingestao`: quando a linha entrou no banco. Imutável.
-- **tempo de processamento** — `atualizado_em`, mantido por trigger: quando o ingestor tocou a linha
-  pela última vez. É o sinal bruto de que a origem mudou algo.
+- **Tempo do evento:** `despesas.data_despesa`, `sessao_plenaria.data_sessao` e
+  `participacoes_comissao.data_inicio` indicam quando o fato ocorreu no mundo. Esse é o eixo
+de qualquer análise temporal.
+- **Tempo de ingestão:** `timestamp_ingestao` registra quando a linha entrou no banco e não muda.
+- **Tempo de processamento:** `atualizado_em`, mantido por trigger, registra quando o ingestor
+  tocou a linha pela última vez. É o sinal bruto de que a origem mudou algo.
 
 Não desnormalizamos nada nesta entrega. `estrutura_gabinete.qtd_total_servidores` é coluna gerada,
 não duplicação, e `despesas.ano`/`mes` são redundantes com `data_despesa` de propósito: vêm da
@@ -102,12 +111,12 @@ após a segunda carga, `atualizado_em > timestamp_ingestao` em 21.430 de 21.430 
 condicional (`WHERE valor IS DISTINCT FROM EXCLUDED.valor OR ...`) é pré-requisito do CDC da E2.
 
 **Perdas.** Correções retroativas da CEAPS são **perdidas**: se um lançamento de R$ 10.000 vira
-R$ 8.000, sobrescrevemos e a versão antiga desaparece. Perdemos também quem saiu do exercício —
-quando nem a lista por legislatura nem os endpoints históricos registrarem a pessoa. Partido e UF
-desconhecidos ficam nulos; não se fabrica `S/PART` nem `DF`.
+R$ 8.000, sobrescrevemos o valor e a versão antiga desaparece. Também perdemos o histórico de quem
+saiu do exercício quando nem a lista por legislatura nem os endpoints históricos registram a pessoa.
+Partido e UF desconhecidos ficam nulos; não se fabrica `S/PART` nem `DF`.
 
 **Irreversibilidade.** Nenhuma estrutural: o esquema sobe do zero por migrações. Mas o histórico
-não capturado entre hoje e a implantação do CDC é **irrecuperável** — a origem não o guarda.
+não capturado entre hoje e a implantação do CDC é **irrecuperável**, pois a origem não o guarda.
 
 Os 4 lançamentos com data anterior a 2000 (o menor é `0202-07-04`) são erro de digitação na fonte
 e ficam preservados como estão; corrigi-los é decisão da camada analítica, não do espelho.
