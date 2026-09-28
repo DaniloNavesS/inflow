@@ -11,7 +11,11 @@ preserva as respostas originais e mantém uma fonte transacional normalizada em 
 arquitetura prioriza reprocessamento seguro, rastreabilidade da origem e separação entre dado bruto,
 dado operacional e metadados de execução.
 
-![Arquitetura do pipeline Mandato Aberto, das fontes oficiais aos schemas Bronze, OLTP e Monitoring](./img/arquitetura_inflow.jpg)
+![Diagrama da arquitetura do Mandato Aberto, com fontes, ingestão, monitoramento e camadas Bronze, Silver e Gold](./img/arquitetura_inflow.jpg)
+
+Na figura, **Gold** representa a camada de consumo analítico. Ela organiza dados tratados em
+indicadores, métricas e visões de negócio que apoiam as perguntas de gestão. Essa etapa ainda não
+está implementada na E1, que entrega Bronze e OLTP.
 
 ## Fluxo de uma execução
 
@@ -157,6 +161,6 @@ ingestion/src/
 
 As definições de banco ficam em `scripts/sql/`, separadas pelos schemas `bronze`, `oltp` e
 `monitoring`. A justificativa do modelo e de seus compromissos está no
-[Registro de ADR](./adr/modelagem-do-sistema-de-origem); fontes e contratos de dados estão
+[ADR 0002](./adr/0002-modelagem-do-sistema-de-origem.md); fontes e contratos de dados estão
 em [Fontes e endpoints](./fontes-e-endpoints); e as medições estão registradas em
 [Carga de trabalho](./metrics/workload).
