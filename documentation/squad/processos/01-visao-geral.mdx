@@ -26,7 +26,7 @@ cada pessoa mais atuou, não uma divisão rígida: todos podem abrir PR em qualq
 ## Ciclo de uma entrega
 
 1. **Leitura do enunciado.** O squad transforma o checklist de aceite em itens rastreáveis
-   (ver [Definição de pronto](./03-definicao-de-pronto.mdx)).
+   que compõem a definição de pronto da entrega.
 2. **Divisão por domínio.** Cada frente vira uma branch própria (ex.: modelagem, ingestão, ADR,
    documentação). Domínios do banco — parlamentar, comissões, presença, CEAPS, gabinete — são
    unidades naturais de divisão, porque cada um tem job, tabelas e testes próprios.
@@ -35,5 +35,4 @@ cada pessoa mais atuou, não uma divisão rígida: todos podem abrir PR em qualq
 4. **Verificação do zero.** Antes de fechar a entrega, alguém que não escreveu o código clona o
    repositório, sobe o ambiente com `docker compose` a partir de um volume vazio e roda os testes.
 5. **Retrospectiva curta.** O que funcionou, o que quebrou e o que muda na próxima entrega fica
-   registrado em [Lições aprendidas](./04-licoes-aprendidas.mdx).
-
+   registrado como lições aprendidas.

@@ -100,7 +100,7 @@ Onde há redundância, ela é deliberada:
 | `senadores.partido` e `senadores.uf` | retrato do momento da coleta, útil para o perfil atual; **não** deve ser usado para fatos passados — o lugar certo é o histórico de filiações e mandatos (pendente) |
 
 Não há desnormalização para desempenho: com ~34 mil linhas por ano, a agregação mais cara leva
-12 ms (ver [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md#passo-3--medir)). Desnormalizar
+12 ms (ver [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md#medição)). Desnormalizar
 só se justifica quando uma medição mostrar o contrário.
 
 ## Como a origem trata histórico
@@ -177,4 +177,3 @@ scripts/sql/bronze/001_raw_payloads.sql          montado como 020_bronze.sql
 
 O PostgreSQL executa esses arquivos em ordem alfabética **apenas quando o volume está vazio**.
 Mudança de esquema, portanto, exige `make clean` antes de subir de novo.
-
