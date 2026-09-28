@@ -3,7 +3,7 @@ sidebar_position: 1
 title: Visão geral
 ---
 
-# Mandato Aberto — E1: fonte transacional
+# Mandato Aberto: E1, fonte transacional
 
 O Mandato Aberto organiza **dados abertos do Senado Federal** em um banco PostgreSQL transacional (OLTP):
 esquema com chaves e restrições reais, criado por scripts
@@ -13,16 +13,14 @@ transformações analíticas na E3) partem deste banco.
 
 ## Domínio
 
-**Dados abertos brasileiros — Senado Federal.** Cota para o Exercício da Atividade Parlamentar dos
+**Dados abertos brasileiros do Senado Federal:** Cota para o Exercício da Atividade Parlamentar dos
 Senadores (CEAPS), fornecedores, cadastro parlamentar, comissões, presença em plenário (Diário do
 Senado Federal) e estrutura de gabinete.
 
 ## Pergunta de gestão
 
-:::tip Pergunta central
-**Quanto cada senador em exercício gastou por mês com a CEAPS em 2024, em quais categorias e com
-quais fornecedores — e quais senadores se desviam da média do próprio partido e da própria UF?**
-:::
+### Pergunta central
+**Quanto cada senador em exercício gastou por mês com a CEAPS em 2024, em quais categorias e com quais fornecedores — e quais senadores se desviam da média do próprio partido e da própria UF?**
 
 - **Sujeito:** os senadores em exercício na 57ª Legislatura.
 - **Recorte:** despesas CEAPS do ano fiscal completo de 2024 (21.430 lançamentos), por mês,
@@ -40,7 +38,7 @@ As perguntas derivadas (presença, comissões, gabinete) e a situação de cada 
 | [Arquitetura do pipeline](./arquitetura-pipeline.mdx) | Como a carga funciona, das APIs às tabelas |
 | [Modelo de dados](./modelo-de-dados.mdx) | Esquema físico, restrições, migrações, histórico e carimbos de tempo |
 | [Fontes e endpoints](./fontes-e-endpoints.mdx) | De onde vem cada dado |
-| [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) | Porque escolhemos o postgres como SGDB |
+| [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) | Escolha do SGBD e contexto da fonte de presença |
 | [Caracterização da carga](./metrics/workload.md) | Volume, escrita, leitura, padrão de acesso e latência (passo 1) |
 | [Presença via DSF](./metrics/presenca-dsf.mdx) | Prova de viabilidade da fonte de presença |
 
@@ -48,17 +46,17 @@ As perguntas derivadas (presença, comissões, gabinete) e a situação de cada 
 
 Situação de cada item:
 
-- **Atendido** — o item está completo e a evidência pode ser verificada no repositório.
-- **Parcial** — o item funciona, mas há uma ressalva documentada logo abaixo da tabela.
-- **Pendente** — o item ainda não foi entregue.
+- **Atendido:** o item está completo e a evidência pode ser verificada no repositório.
+- **Parcial:** o item funciona, mas há uma ressalva documentada logo abaixo da tabela.
+- **Pendente:** o item ainda não foi entregue.
 
 | Item | Situação | Evidência |
 |---|---|---|
 | Domínio de dados abertos e pergunta de gestão em uma frase | Atendido | [Pergunta de gestão](#pergunta-de-gestão) |
-| Esquema físico versionado, executável do zero em ordem | Atendido | Modelo OLPT com esquema físico |
-| Carga reprodutível com um comando, sem passo manual | Atendido | `make ingestion` (ou `docker compose run --rm ingestion`) baixa tudo das APIs públicas — ver [Como executar](./como-executar.mdx) |
-| Volume que torne a plataforma interessante | Atendido | Ano fiscal completo: 21.430 despesas, ~34 mil linhas no total; série 2020–2025 disponível com a mesma carga — ver [Volume](./metrics/workload.md#volume) |
+| Esquema físico versionado, executável do zero em ordem | Atendido | Esquema OLTP criado por scripts SQL numerados. Consulte [Modelo de dados](./modelo-de-dados.mdx). |
+| Carga reprodutível com um comando, sem passo manual | Atendido | `make ingestion` (ou `docker compose run --rm ingestion`) baixa dados das APIs públicas. Consulte [Como executar](./como-executar.mdx). |
+| Volume que torne a plataforma interessante | Atendido | O exercício de 2024 contém 21.430 despesas e cerca de 34 mil linhas. A carga cobre os anos de 2020 a 2025. Consulte [Volume](./metrics/workload.md#volume). |
 | Caracterização da carga (passo 1 do Método de Decisão) | Atendido | [Caracterização da carga](./metrics/workload.md) |
 | Declaração de como a origem trata histórico | Atendido | [Modelo de dados › Histórico](./modelo-de-dados.mdx#como-a-origem-trata-histórico) |
-| 1 ADR sobre a modelagem do sistema de origem | Atendido | [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) |
+| ADR sobre a escolha do SGBD | Atendido | [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) |
 | README que permite a terceiro subir tudo com Docker Compose | Atendido | `README.md` na raiz e [Como executar](./como-executar.mdx) |
