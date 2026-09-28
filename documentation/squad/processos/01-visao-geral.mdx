@@ -12,24 +12,25 @@ técnica (o **quê** e o **porquê**) fica na aba [Documentação](/docs/intro).
 
 ## Integrantes e frentes de trabalho
 
-A tabela abaixo foi montada a partir do histórico do Git até a E1. Ela descreve as frentes em que
-cada pessoa mais atuou, não uma divisão rígida: todos podem abrir PR em qualquer parte do projeto.
+A tabela abaixo resume as principais frentes em que cada pessoa atuou na E1. Ela não representa
+uma divisão rígida: todos podem abrir PR em qualquer parte do projeto.
 
 | Integrante | Frentes principais na E1 |
 |---|---|
 | Ana Luiza | Modelagem do histórico parlamentar, presença via DSF, identidade de fornecedores, modularização da ingestão, testes de qualidade, consolidação do escopo |
 | Danilo Naves | Site de documentação (Docusaurus + GitHub Pages), Makefile e fluxo de inicialização, camada Bronze, monitoramento, integração das branches |
 | Manuella Valadares | DDL relacional inicial, orquestração com Docker Compose, primeira versão da carga |
+| Yan Guimarães | Testes dos endpoints das APIs do Senado para avaliar se respondiam às perguntas propostas; identificação das lacunas nas perguntas 5, 6 e 10, sobre presença dos senadores |
 | Yzabella Miranda | Migrações versionadas, ADR 0001, caracterização da carga de trabalho com medições |
-| Vilmar Fagundes | Ajuste da documentação, Criação das perguntas e definição dos perfis |
+| Vilmar Fagundes | Ajuste da documentação, criação das perguntas e definição dos perfis |
 
 ## Ciclo de uma entrega
 
 1. **Leitura do enunciado.** O squad transforma o checklist de aceite em itens rastreáveis
    que compõem a definição de pronto da entrega.
 2. **Divisão por domínio.** Cada frente vira uma branch própria (ex.: modelagem, ingestão, ADR,
-   documentação). Domínios do banco — parlamentar, comissões, presença, CEAPS, gabinete — são
-   unidades naturais de divisão, porque cada um tem job, tabelas e testes próprios.
+   documentação). Domínios do banco, como parlamentar, comissões, presença, CEAPS e gabinete,
+   são unidades naturais de divisão, porque cada um tem job, tabelas e testes próprios.
 3. **Integração contínua em `main`.** Branches pequenas, integradas por Pull Request assim que o
    item está de pé, em vez de uma grande integração no último dia.
 4. **Verificação do zero.** Antes de fechar a entrega, alguém que não escreveu o código clona o
