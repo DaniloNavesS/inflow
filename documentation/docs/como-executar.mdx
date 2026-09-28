@@ -1,0 +1,100 @@
+---
+sidebar_position: 2
+title: Como executar
+---
+
+# Como executar do zero
+
+Tudo roda em contêineres. Não é preciso instalar Python nem PostgreSQL na máquina, e nenhum
+arquivo de dados é baixado à mão: a carga busca tudo nas APIs públicas do Senado.
+
+## Pré-requisitos
+
+- Docker com Docker Compose v2 (`docker compose version`)
+- Acesso à internet (a carga consulta `legis.senado.leg.br` e `adm.senado.gov.br`)
+- Opcional: GNU Make, para os atalhos. Sem Make, use os comandos `docker compose` equivalentes.
+
+## Passo a passo
+
+```bash
+git clone https://github.com/DaniloNavesS/inflow.git
+cd inflow
+cp .env.example .env                  # no PowerShell: Copy-Item .env.example .env
+```
+
+| Etapa | Com Make | Só com Docker Compose |
+|---|---|---|
+| Subir o PostgreSQL e criar o esquema | `make up` | `docker compose up -d postgres` |
+| Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
+| Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
+| Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
+| Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
+
+`make ingestion` já executa `make up` antes, então para uma primeira execução basta:
+
+```bash
+make ingestion
+```
+O banco fica acessível em `localhost:5433`.
+
+## O que acontece na primeira subida
+
+1. O contêiner `postgres` encontra o volume `inflow_postgres_data` vazio e executa, **em ordem
+   alfabética**, os scripts montados em `/docker-entrypoint-initdb.d`: `scripts/sql/oltp/001` a
+   `011`, depois o schema `monitoring` e o schema `bronze`.
+2. O `healthcheck` confirma que o banco aceita conexões.
+3. O contêiner `ingestion` roda `python main.py`, que executa os jobs em sequência (senadores,
+   comissões, presença DSF, CEAPS e gabinete), registrando cada execução em `monitoring`.
+
+:::warning Os scripts de esquema só rodam com volume vazio
+O PostgreSQL executa `docker-entrypoint-initdb.d` apenas na criação do volume. Se você já tinha
+subido uma versão anterior do projeto, rode `make clean` (ou `docker compose down -v`) antes, senão
+o esquema antigo continua valendo.
+:::
+
+## Conferir a carga
+
+```sql
+SET search_path TO oltp;
+
+SELECT 'senadores' AS tabela, count(*) FROM senadores
+UNION ALL SELECT 'despesas', count(*) FROM despesas
+UNION ALL SELECT 'fornecedores', count(*) FROM fornecedores
+UNION ALL SELECT 'participacoes_comissao', count(*) FROM participacoes_comissao
+UNION ALL SELECT 'registro_presenca', count(*) FROM registro_presenca
+UNION ALL SELECT 'estrutura_gabinete', count(*) FROM estrutura_gabinete;
+
+-- Histórico das execuções do pipeline
+SELECT run_id, status, ingestion_year, duration_seconds
+FROM monitoring.pipeline_runs
+ORDER BY started_at DESC;
+```
+
+## Reexecutar e ampliar o recorte
+
+A carga é **idempotente**: rodar `make ingestion` de novo converge para o mesmo estado (upsert pela
+chave oficial do Senado), sem duplicar linhas.
+
+Para carregar outros anos de CEAPS e estrutura de gabinete, sem mudar o esquema:
+
+```bash
+for ano in 2020 2021 2022 2023 2024 2025; do
+  docker compose run --rm -e INGESTION_YEAR=$ano ingestion
+done
+```
+
+Pela contagem na origem, a série 2020–2025 leva `despesas` a cerca de 112 mil linhas (ver
+[Caracterização da carga](./metrics/workload.md#volume)).
+
+## Variáveis de ambiente
+
+| Variável | Finalidade | Padrão |
+|---|---|---|
+| `POSTGRES_DB` | nome do banco | `inflow_db` |
+| `POSTGRES_USER` | usuário do banco | `inflow_user` |
+| `POSTGRES_PASSWORD` | senha do banco | `inflow_pass` |
+| `POSTGRES_PORT` | porta publicada no host | `5433` |
+| `INGESTION_YEAR` | ano consultado em CEAPS e estrutura de gabinete | `2024` |
+| `LIMIT_SENADORES` | limita senadores processados em desenvolvimento; `0` processa todos | `0` |
+| `LEGISLATURE` | legislatura de referência | `57` |
+| `DOCS_PORT` | porta do site de documentação (`make docs`) | `3000` |

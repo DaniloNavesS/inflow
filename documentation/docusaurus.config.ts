@@ -67,6 +67,21 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        // Segunda instância de docs: abas "Processos do Squad" e "Uso de IA",
+        // separadas da documentação técnica da entrega.
+        id: 'squad',
+        path: 'squad',
+        routeBasePath: 'squad',
+        sidebarPath: './sidebarsSquad.ts',
+        editUrl: 'https://github.com/DaniloNavesS/inflow/tree/main/documentation/',
+      },
+    ],
+  ],
+
   themeConfig: {
     // Replace with your project's social card
     colorMode: {
@@ -76,6 +91,8 @@ const config: Config = {
       title: 'inflow',
       items: [
         {to: '/docs/intro', label: 'Documentação', position: 'right'},
+        {type: 'docSidebar', sidebarId: 'processos', docsPluginId: 'squad', label: 'Processos do Squad', position: 'right'},
+        {type: 'docSidebar', sidebarId: 'ia', docsPluginId: 'squad', label: 'Uso de IA', position: 'right'},
         {href: 'https://github.com/DaniloNavesS/inflow', label: 'GitHub', position: 'right'},
       ],
     },

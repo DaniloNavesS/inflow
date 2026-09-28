@@ -1,0 +1,45 @@
+---
+title: Política de uso de IA
+sidebar_label: Política de uso
+slug: /uso-de-ia
+---
+
+# Uso de IA no InFlow
+
+Ferramentas de IA generativa (assistentes de código e de escrita) podem ser usadas no projeto.
+Esta página define **onde**, **com que cuidado** e **como registrar**. O princípio é simples:
+a IA pode acelerar o trabalho, mas **a responsabilidade pelo que entra em `main` é sempre de uma
+pessoa do squad**, que precisa conseguir explicar e defender o resultado na correção.
+
+## Onde usamos
+
+| Uso | Permitido? | Condição |
+|---|---|---|
+| Rascunho e revisão de texto da documentação | Sim | Todo número e toda afirmação “carregado/implementado” é conferido contra o código e o banco |
+| Explicação de erros, stack traces e planos de execução | Sim | — |
+| Geração de código de ingestão, SQL e testes | Sim | Revisado linha a linha e executado do zero (`make clean && make test`) antes do PR |
+| Sugestão de alternativas para uma ADR | Sim | A decisão, os números e o gatilho de revisão são do squad |
+| Gerar números de volume, tempo ou latência | **Não** | Números vêm sempre de medição reproduzível no nosso ambiente |
+| Inventar endpoints, campos ou regras da fonte | **Não** | Toda fonte é verificada no domínio oficial do Senado |
+| Resolver conflito de merge “no automático” | **Não** | Conflito é revisado arquivo a arquivo por uma pessoa |
+
+## Regras de verificação
+
+1. **Nada de dado fabricado.** Contagens, tempos e cardinalidades citados na documentação vêm de
+   consultas que qualquer pessoa pode repetir (os comandos estão junto dos números).
+2. **Fonte primária primeiro.** Afirmações sobre a API do Senado ou sobre o DSF são conferidas no
+   endpoint ou no documento oficial, não na resposta do assistente.
+3. **Executar antes de confiar.** Código sugerido só vale depois de rodar no ambiente Docker do
+   projeto, a partir de um banco vazio.
+4. **Entender antes de aceitar.** Se ninguém do squad consegue explicar um trecho gerado, ele não
+   entra.
+5. **Sem dados sensíveis.** Senhas do `.env` e dados pessoais não são colados em ferramentas
+   externas. Os dados do projeto são públicos, mas credenciais não.
+
+## Como registrar
+
+- Uso relevante (código, SQL, ADR ou página inteira) é anotado no
+  [Registro de uso](./02-registro.mdx), com ferramenta, finalidade e como foi verificado.
+- Commits com participação significativa de um assistente incluem o trailer
+  `Co-Authored-By:` correspondente, para que o histórico do Git mostre a origem.
+- Usos triviais (autocompletar uma linha, corrigir ortografia) não precisam de registro.

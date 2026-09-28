@@ -1,0 +1,179 @@
+---
+sidebar_position: 4
+title: Modelo de dados
+description: Esquema físico do OLTP do InFlow, restrições de integridade, migrações, tratamento de histórico e carimbos de tempo.
+---
+
+# Modelo de dados
+
+O banco tem três schemas com papéis separados:
+
+| Schema | Papel | Tabelas |
+|---|---|---|
+| `oltp` | espelho normalizado da origem | 10 tabelas (abaixo) |
+| `bronze` | resposta bruta de cada chamada às fontes, para auditoria e reprocessamento | `raw_payloads` |
+| `monitoring` | metadados de execução do pipeline | `pipeline_runs`, `job_runs` |
+
+## Diagrama
+
+```text
+                         ┌──────────────┐
+                         │  senadores   │  PK id = CodigoParlamentar
+                         └──────┬───────┘
+      ┌───────────────┬─────────┼─────────────────┬───────────────────────┐
+      │               │         │                 │                       │
+┌─────▼──────┐ ┌──────▼──────┐  │  ┌──────────────▼───┐        ┌──────────▼──────────┐
+│ despesas   │ │participacoes│  │  │estrutura_gabinete│        │ registro_presenca   │
+│ PK id CEAPS│ │ _comissao   │  │  │ UQ (senador, ano)│        │ senador_id NULLABLE │
+└─────┬──────┘ └──────┬──────┘  │  └──────────────────┘        └───┬────────────┬────┘
+      │               │         │                                  │            │
+┌─────▼──────┐ ┌──────▼──────┐  │                          ┌───────▼──────┐ ┌───▼────────────┐
+│fornecedores│ │  comissoes  │  │                          │ documento_dsf├─►sessao_plenaria │
+│UQ cnpj_cpf │ │PK CodComissao│ │                          │ UQ (diário,  │ │ UQ (numero,    │
+└────────────┘ └─────────────┘  │                          │  páginas)    │ │  data_sessao)  │
+                                │                          └──────────────┘ └────────────────┘
+                         ┌──────▼─────────┐
+                         │sessoes_presenca│  legada — ver pendências
+                         └────────────────┘
+```
+
+## Tabelas do schema `oltp`
+
+Criadas pelos scripts de `scripts/sql/oltp/`. Toda tabela tem chave primária, `NOT NULL` onde a
+origem garante valor, e `timestamp_ingestao` preenchido pelo banco.
+
+| Tabela | Chave primária | Identidade de reprocessamento | Chaves estrangeiras | Restrições de domínio |
+|---|---|---|---|---|
+| `senadores` | `id` (`CodigoParlamentar`) | a própria PK | — | `uf` restrita às 27 UFs |
+| `comissoes` | `id` (`CodigoComissao`) | a própria PK | — | — |
+| `participacoes_comissao` | `id` serial | `UNIQUE (senador_id, comissao_id, cargo, data_inicio)` | `senadores`, `comissoes` | `data_fim >= data_inicio` |
+| `fornecedores` | `id` serial | `UNIQUE (cnpj_cpf)` | — | — |
+| `despesas` | `id` (identificador do lançamento CEAPS) | a própria PK | `senadores`, `fornecedores` (`RESTRICT`) | `valor >= 0`, `mes` entre 1 e 12, `ano` entre 2000 e 2026 |
+| `estrutura_gabinete` | `id` serial | `UNIQUE (senador_id, ano)` | `senadores` | quantidades `>= 0`; `qtd_total_servidores` gerada |
+| `sessao_plenaria` | `id` serial | `UNIQUE (numero, data_sessao)` | — | — |
+| `documento_dsf` | `id` serial | `UNIQUE (codigo_diario, pagina_inicial, pagina_final)` | `sessao_plenaria` | `pagina_final >= pagina_inicial`; `status_parser` em `SUCESSO`, `PARCIAL`, `FALHA` |
+| `registro_presenca` | `id` serial | `UNIQUE (documento_dsf_id, nome_documento)` | `sessao_plenaria`, `documento_dsf`, `senadores` (opcional) | `situacao` em `PRESENTE`, `DESCONHECIDO`; `resolucao` em `EXATA`, `AMBIGUA`, `NAO_RESOLVIDA` |
+| `sessoes_presenca` | `id` serial | `UNIQUE (sessao_id, senador_id, data_sessao)` | `senadores` | legada, baseada em votação; não é fonte de presença |
+
+Escolhas que valem destacar:
+
+- **Chaves naturais do Senado como PK** (`senadores`, `comissoes`, `despesas`). A reconciliação com a
+  fonte é direta e o upsert (`ON CONFLICT`) não precisa de tabela de mapeamento.
+- **`ON DELETE RESTRICT` em `despesas`.** Apagar um senador ou fornecedor com despesa é recusado:
+  a despesa é o fato central da pergunta de gestão e não pode sumir em cascata.
+- **`registro_presenca.senador_id` aceita nulo.** Nome do DSF que não casa com exatidão fica sem
+  senador (`resolucao = 'NAO_RESOLVIDA'`) em vez de ser atribuído por aproximação.
+- **`valor` em `NUMERIC(14,2)`**, nunca ponto flutuante: é dinheiro público e soma precisa fechar.
+
+### Índices
+
+| Índice | Consulta que atende |
+|---|---|
+| `despesas (senador_id, data_despesa)` | recorte por senador e período — o eixo da pergunta central |
+| `despesas (ano, mes)` | agregações mensais |
+| `despesas (tipo_despesa)` | composição por categoria |
+| `despesas (fornecedor_id)` | quanto cada fornecedor recebeu |
+| `participacoes_comissao (senador_id)`, `(comissao_id)` | vínculos por senador e por comissão |
+| `registro_presenca (senador_id, sessao_id)` | presença por senador |
+| `sessao_plenaria (data_sessao)` | recorte de sessões por período |
+
+Os tempos medidos para essas consultas estão em
+[Caracterização da carga › Padrão de acesso](./metrics/workload.md#padrão-de-acesso).
+
+## Normalização
+
+O OLTP está em **3FN**: cada fato mora em uma tabela, identificado pela chave da origem.
+
+- **Fornecedor é entidade própria**, e não texto repetido em cada despesa. Isso permite responder
+  “quanto cada fornecedor recebeu e de quais senadores” com um `JOIN` por chave inteira, e corrigir
+  a razão social em um único lugar.
+- **Presença separa sessão, documento e registro.** Uma sessão pode ter mais de um documento no
+  DSF; cada registro aponta para o documento e a página de onde saiu, o que torna cada presença
+  auditável.
+
+Onde há redundância, ela é deliberada:
+
+| Redundância | Por que se paga |
+|---|---|
+| `despesas.ano` e `despesas.mes` (derivam de `data_despesa`) | vêm prontos da origem e sustentam o índice `(ano, mes)` dos recortes mensais; a origem tem lançamentos com `data_despesa` digitada errada (ex.: `0202-07-04`), e `ano`/`mes` preservam o período de competência informado |
+| `estrutura_gabinete.qtd_total_servidores` | coluna **gerada** (`GENERATED ALWAYS ... STORED`): o banco garante a consistência, não há como divergir |
+| `senadores.partido` e `senadores.uf` | retrato do momento da coleta, útil para o perfil atual; **não** deve ser usado para fatos passados — o lugar certo é o histórico de filiações e mandatos (pendente) |
+
+Não há desnormalização para desempenho: com ~34 mil linhas por ano, a agregação mais cara leva
+12 ms (ver [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md#medição)). Desnormalizar
+só se justifica quando uma medição mostrar o contrário.
+
+## Como a origem trata histórico
+
+:::info Declaração
+O OLTP do InFlow é **CRUD com sobrescrita** (upsert pela chave oficial). A cada carga, o valor
+anterior de uma linha é substituído pelo que a fonte publica agora. O schema `bronze` guarda, em
+modo **insert-only**, cada resposta bruta distinta da fonte (chave `source_url` + hash SHA-256).
+:::
+
+A própria origem é híbrida:
+
+| Fonte | Comportamento na origem | Como o InFlow guarda |
+|---|---|---|
+| CEAPS (`despesas_ceaps/{ano}`) | devolve o ano inteiro reprocessado; correções retroativas sobrescrevem o valor anterior sem aviso | upsert por `id` do lançamento — **sobrescreve** |
+| Cadastro de senadores (`lista/atual`) | retrato do momento | upsert por `CodigoParlamentar` — **sobrescreve** |
+| Comissões do senador | intervalos com `data_inicio` / `data_fim` | uma linha por vínculo e período — **preserva** o histórico que a fonte expõe |
+| DSF | documento oficial imutável | uma linha por documento, com URL, páginas e hash — **preserva** |
+| Qualquer resposta HTTP | — | `bronze.raw_payloads`: nova linha quando o conteúdo muda — **preserva**, em formato bruto |
+
+### O que isso permite perguntar
+
+| Pergunta | Respondível? |
+|---|---|
+| Quanto o senador X gastou em cada mês de 2024, segundo a fonte **hoje**? | Sim, direto no OLTP |
+| Quais fornecedores mais receberam, e de quem? | Sim |
+| Em quais comissões o senador X estava em uma data D? | Sim, pelos intervalos de `participacoes_comissao` |
+| Quem estava presente na sessão S, e em que página do DSF isso consta? | Sim |
+| **Qual era o valor de um lançamento antes de a fonte corrigi-lo?** | **Não no OLTP.** Só reconstruindo a partir das respostas brutas em `bronze`, e apenas para cargas executadas depois que a Bronze existia |
+| Quantos lançamentos a fonte corrigiu entre duas cargas? | Ainda não: exige UPDATE condicional e CDC (E2) |
+| Qual era o partido do senador na data da despesa? | Ainda não: depende do histórico de filiações (pendente) |
+
+A escolha e seus limites estão justificados na [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md).
+
+## Carimbos de tempo
+
+Cada tabela distingue três tempos. Confundi-los é o que produz relatório que ninguém explica.
+
+| Tempo | Significado | Colunas | Quem define |
+|---|---|---|---|
+| **Evento** | quando o fato aconteceu no mundo | `despesas.data_despesa` (e `ano`/`mes`), `sessao_plenaria.data_sessao`, `participacoes_comissao.data_inicio`/`data_fim`, `estrutura_gabinete.ano`, `documento_dsf.data_publicacao` | a fonte |
+| **Ingestão** | quando a linha entrou no banco pela primeira vez; nunca muda | `timestamp_ingestao` em todas as tabelas `oltp`; `bronze.raw_payloads.received_at` | o banco (`DEFAULT CURRENT_TIMESTAMP`) |
+| **Processamento** | quando a carga tocou a linha pela última vez | `atualizado_em` (trigger `trigger_set_atualizado_em` em `BEFORE UPDATE`); `bronze.raw_payloads.last_seen_at` | o banco |
+
+Regras de uso:
+
+- Toda análise temporal (por mês, por ano, por sessão) usa **tempo de evento**.
+- `timestamp_ingestao` responde “desde quando o InFlow conhece esta linha”.
+- `atualizado_em` hoje é atualizado mesmo quando nada mudou na fonte (limitação registrada na ADR);
+  não use como sinal de mudança até a E2.
+- `participacoes_comissao` não tem `atualizado_em`: a identidade inclui `data_inicio`, então um
+  vínculo novo é linha nova.
+- Todos os carimbos são `TIMESTAMPTZ` e a sessão do banco usa `UTC`.
+
+## Migrações
+
+O esquema é criado **do zero, em ordem**, pelos scripts numerados montados em
+`/docker-entrypoint-initdb.d` do contêiner PostgreSQL:
+
+```text
+scripts/sql/oltp/001_extensions_and_schema.sql   schema oltp, extensões, UTC
+scripts/sql/oltp/002_functions.sql               trigger de atualizado_em
+scripts/sql/oltp/003_senators.sql
+scripts/sql/oltp/004_committees.sql
+scripts/sql/oltp/005_committee_memberships.sql
+scripts/sql/oltp/006_sessions.sql                (legada)
+scripts/sql/oltp/007_suppliers.sql
+scripts/sql/oltp/008_expenses.sql
+scripts/sql/oltp/009_staff.sql
+scripts/sql/monitoring/001_monitoring.sql        montado como 010_monitoring.sql
+scripts/sql/oltp/011_attendance.sql              sessão, documento DSF, presença
+scripts/sql/bronze/001_raw_payloads.sql          montado como 020_bronze.sql
+```
+
+O PostgreSQL executa esses arquivos em ordem alfabética **apenas quando o volume está vazio**.
+Mudança de esquema, portanto, exige `make clean` antes de subir de novo.
