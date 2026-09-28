@@ -1,0 +1,207 @@
+{
+  "generated_at": "2026-09-28T13:49:26Z",
+  "host": {
+    "platform": "Linux-7.1.13-200.fc44.x86_64-x86_64-with-glibc2.36",
+    "python": "3.11.14"
+  },
+  "configuration": {
+    "scale": 1,
+    "batch_size": 500,
+    "query_runs": 30,
+    "cardinalities": {
+      "senators": 81,
+      "committees": 425,
+      "memberships": 7189,
+      "sessions": 2430,
+      "suppliers": 3516,
+      "expenses": 21430,
+      "staff": 81
+    }
+  },
+  "engines": [
+    {
+      "engine": "postgresql",
+      "version": "PostgreSQL 15.17 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "cold_load": [
+        {
+          "job": "senators",
+          "rows": 81,
+          "seconds": 0.015092,
+          "rows_per_second": 5367.23
+        },
+        {
+          "job": "committees",
+          "rows": 7614,
+          "seconds": 0.550084,
+          "rows_per_second": 13841.52
+        },
+        {
+          "job": "sessions",
+          "rows": 2430,
+          "seconds": 0.151627,
+          "rows_per_second": 16026.2
+        },
+        {
+          "job": "expenses",
+          "rows": 24946,
+          "seconds": 2.071099,
+          "rows_per_second": 12044.81
+        },
+        {
+          "job": "staff",
+          "rows": 81,
+          "seconds": 0.013665,
+          "rows_per_second": 5927.67
+        }
+      ],
+      "warm_upsert": [
+        {
+          "job": "senators",
+          "rows": 81,
+          "seconds": 0.011665,
+          "rows_per_second": 6943.84
+        },
+        {
+          "job": "committees",
+          "rows": 7614,
+          "seconds": 0.319955,
+          "rows_per_second": 23797.1
+        },
+        {
+          "job": "sessions",
+          "rows": 2430,
+          "seconds": 0.11474,
+          "rows_per_second": 21178.35
+        },
+        {
+          "job": "expenses",
+          "rows": 24946,
+          "seconds": 1.540832,
+          "rows_per_second": 16189.96
+        },
+        {
+          "job": "staff",
+          "rows": 81,
+          "seconds": 0.01143,
+          "rows_per_second": 7086.32
+        }
+      ],
+      "queries": [
+        {
+          "query": "aggregate_senator_type",
+          "runs": 30,
+          "p50_ms": 16.527,
+          "p95_ms": 20.905,
+          "min_ms": 15.159
+        },
+        {
+          "query": "indexed_senator_period",
+          "runs": 30,
+          "p50_ms": 1.034,
+          "p95_ms": 1.235,
+          "min_ms": 0.969
+        },
+        {
+          "query": "supplier_totals",
+          "runs": 30,
+          "p50_ms": 8.748,
+          "p95_ms": 10.387,
+          "min_ms": 8.145
+        }
+      ],
+      "despesas_size_bytes": 10125312
+    },
+    {
+      "engine": "mariadb",
+      "version": "11.4.13-MariaDB-ubu2404",
+      "cold_load": [
+        {
+          "job": "senators",
+          "rows": 81,
+          "seconds": 0.020004,
+          "rows_per_second": 4049.25
+        },
+        {
+          "job": "committees",
+          "rows": 7614,
+          "seconds": 0.705332,
+          "rows_per_second": 10794.92
+        },
+        {
+          "job": "sessions",
+          "rows": 2430,
+          "seconds": 0.228576,
+          "rows_per_second": 10631.04
+        },
+        {
+          "job": "expenses",
+          "rows": 24946,
+          "seconds": 1.242526,
+          "rows_per_second": 20076.85
+        },
+        {
+          "job": "staff",
+          "rows": 81,
+          "seconds": 0.008992,
+          "rows_per_second": 9007.52
+        }
+      ],
+      "warm_upsert": [
+        {
+          "job": "senators",
+          "rows": 81,
+          "seconds": 0.002036,
+          "rows_per_second": 39778.5
+        },
+        {
+          "job": "committees",
+          "rows": 7614,
+          "seconds": 0.143804,
+          "rows_per_second": 52947.06
+        },
+        {
+          "job": "sessions",
+          "rows": 2430,
+          "seconds": 0.051497,
+          "rows_per_second": 47187.53
+        },
+        {
+          "job": "expenses",
+          "rows": 24946,
+          "seconds": 0.430384,
+          "rows_per_second": 57962.17
+        },
+        {
+          "job": "staff",
+          "rows": 81,
+          "seconds": 0.001525,
+          "rows_per_second": 53120.95
+        }
+      ],
+      "queries": [
+        {
+          "query": "aggregate_senator_type",
+          "runs": 30,
+          "p50_ms": 18.662,
+          "p95_ms": 20.123,
+          "min_ms": 18.048
+        },
+        {
+          "query": "indexed_senator_period",
+          "runs": 30,
+          "p50_ms": 1.997,
+          "p95_ms": 2.199,
+          "min_ms": 1.887
+        },
+        {
+          "query": "supplier_totals",
+          "runs": 30,
+          "p50_ms": 10.647,
+          "p95_ms": 11.052,
+          "min_ms": 10.415
+        }
+      ],
+      "despesas_size_bytes": 81920
+    }
+  ]
+}
