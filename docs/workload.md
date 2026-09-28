@@ -104,7 +104,7 @@ e outra de gravação.
   publicação mensal da origem; é quando a carga tem mais linhas novas para gravar.
 - **Fim de exercício:** dezembro concentra prestação de contas e correções retroativas de
   lançamentos anteriores podem ser corrigidos retroativamente nesse período. É quando a sobrescrita
-  descrita na [ADR 0001](adr/0001-modelagem-do-sistema-de-origem.md) mais destrói informação.
+  descrita na [ADR 0002](adr/0002-modelagem-do-sistema-de-origem.md) mais destrói informação.
 - **Início de legislatura** (a cada 4 anos): troca de 1/3 dos senadores, recomposição de todas as
   comissões. Esse período concentra a escrita em `senadores`, `comissoes` e `participacoes_comissao`.
 
