@@ -4,7 +4,7 @@
 
 - **Status:** aceita
 - **Data:** 2026-09-26
-- **Decisores:** Squad InFlow
+- **Decisores:** Squad Mandato Aberto
 
 ## Contexto
 

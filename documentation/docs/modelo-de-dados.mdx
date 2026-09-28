@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Modelo de dados
-description: Esquema físico do OLTP do InFlow, restrições de integridade, migrações, tratamento de histórico e carimbos de tempo.
+description: Esquema físico do OLTP do Mandato Aberto, restrições de integridade, migrações, tratamento de histórico e carimbos de tempo.
 ---
 
 # Modelo de dados
@@ -106,14 +106,14 @@ só se justifica quando uma medição mostrar o contrário.
 ## Como a origem trata histórico
 
 :::info Declaração
-O OLTP do InFlow é **CRUD com sobrescrita** (upsert pela chave oficial). A cada carga, o valor
+O OLTP do Mandato Aberto é **CRUD com sobrescrita** (upsert pela chave oficial). A cada carga, o valor
 anterior de uma linha é substituído pelo que a fonte publica agora. O schema `bronze` guarda, em
 modo **insert-only**, cada resposta bruta distinta da fonte (chave `source_url` + hash SHA-256).
 :::
 
 A própria origem é híbrida:
 
-| Fonte | Comportamento na origem | Como o InFlow guarda |
+| Fonte | Comportamento na origem | Como o Mandato Aberto guarda |
 |---|---|---|
 | CEAPS (`despesas_ceaps/{ano}`) | devolve o ano inteiro reprocessado; correções retroativas sobrescrevem o valor anterior sem aviso | upsert por `id` do lançamento — **sobrescreve** |
 | Cadastro de senadores (`lista/atual`) | retrato do momento | upsert por `CodigoParlamentar` — **sobrescreve** |
@@ -148,7 +148,7 @@ Cada tabela distingue três tempos. Confundi-los é o que produz relatório que 
 Regras de uso:
 
 - Toda análise temporal (por mês, por ano, por sessão) usa **tempo de evento**.
-- `timestamp_ingestao` responde “desde quando o InFlow conhece esta linha”.
+- `timestamp_ingestao` responde “desde quando o Mandato Aberto conhece esta linha”.
 - `atualizado_em` hoje é atualizado mesmo quando nada mudou na fonte (limitação registrada na ADR);
   não use como sinal de mudança até a E2.
 - `participacoes_comissao` não tem `atualizado_em`: a identidade inclui `data_inicio`, então um

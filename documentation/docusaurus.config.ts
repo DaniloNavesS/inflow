@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Inflow',
+  title: 'Mandato Aberto',
   tagline: 'Dados públicos. Mais clareza.',
   favicon: 'img/inflow.svg',
 
@@ -17,7 +17,7 @@ const config: Config = {
   url: 'https://DaniloNavesS.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/inflow',
+  baseUrl: process.env.DOCUSAURUS_BASE_URL ?? '/inflow/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
@@ -88,7 +88,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'inflow',
+      title: 'Mandato Aberto',
       items: [
         {to: '/docs/intro', label: 'Documentação', position: 'right'},
         {type: 'docSidebar', sidebarId: 'processos', docsPluginId: 'squad', label: 'Processos do Squad', position: 'right'},
@@ -98,7 +98,7 @@ const config: Config = {
     },
     footer: {
       style: 'light',
-      copyright: `© ${new Date().getFullYear()} Inflow · Projeto acadêmico de Banco de Dados`,
+      copyright: `© ${new Date().getFullYear()} Mandato Aberto · Projeto acadêmico de Banco de Dados`,
     },
     prism: {
       theme: prismThemes.github,
