@@ -40,7 +40,7 @@ As perguntas derivadas (presença, comissões, gabinete) e a situação de cada 
 | [Arquitetura do pipeline](./arquitetura-pipeline.mdx) | Como a carga funciona, das APIs às tabelas |
 | [Modelo de dados](./modelo-de-dados.mdx) | Esquema físico, restrições, migrações, histórico e carimbos de tempo |
 | [Fontes e endpoints](./fontes-e-endpoints.mdx) | De onde vem cada dado |
-| [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) | Por que CRUD normalizado e não insert-only |
+| [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md) | Porque escolhemos o postgres como SGDB |
 | [Caracterização da carga](./metrics/workload.md) | Volume, escrita, leitura, padrão de acesso e latência (passo 1) |
 | [Presença via DSF](./metrics/presenca-dsf.mdx) | Prova de viabilidade da fonte de presença |
 
@@ -55,7 +55,7 @@ Situação de cada item:
 | Item | Situação | Evidência |
 |---|---|---|
 | Domínio de dados abertos e pergunta de gestão em uma frase | Atendido | [Pergunta de gestão](#pergunta-de-gestão) |
-| Esquema físico versionado, executável do zero em ordem | Parcial | Scripts numerados em `scripts/sql/` rodam em ordem na criação do volume. A pasta `migrations/` não é executada pelo Compose e diverge do esquema real — ver [Modelo de dados › Migrações](./modelo-de-dados.mdx#migrações) |
+| Esquema físico versionado, executável do zero em ordem | Atendido | Modelo OLPT com esquema físico |
 | Carga reprodutível com um comando, sem passo manual | Atendido | `make ingestion` (ou `docker compose run --rm ingestion`) baixa tudo das APIs públicas — ver [Como executar](./como-executar.mdx) |
 | Volume que torne a plataforma interessante | Atendido | Ano fiscal completo: 21.430 despesas, ~34 mil linhas no total; série 2020–2025 disponível com a mesma carga — ver [Volume](./metrics/workload.md#volume) |
 | Caracterização da carga (passo 1 do Método de Decisão) | Atendido | [Caracterização da carga](./metrics/workload.md) |
