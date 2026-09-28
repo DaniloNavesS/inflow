@@ -26,6 +26,64 @@ services:
     restart: unless-stopped
     networks:
       - inflow_network
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: inflow_mariadb
+    profiles: ["benchmark"]
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-benchmark}
+      MARIADB_USER: ${MARIADB_USER:-inflow_user}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-inflow_pass}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-inflow_root_pass}
+    ports:
+      - "${MARIADB_PORT:-3307}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "healthcheck.sh --connect --innodb_initialized"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - inflow_network
+
+  db-benchmark:
+    profiles: ["benchmark"]
+    container_name: inflow_db_benchmark
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    working_dir: /benchmark
+    entrypoint: ["python", "benchmark.py"]
+    command: []
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_BENCHMARK_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      MARIADB_HOST: mariadb
+      MARIADB_BENCHMARK_PORT: 3306
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-benchmark}
+      MARIADB_USER: ${MARIADB_USER:-inflow_user}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-inflow_pass}
+    volumes:
+      - ./benchmark:/benchmark:ro,Z
+      - ./benchmark/results:/results:Z
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+    networks:
+      - inflow_network
   ingestion:
     container_name: inflow_ingestion
     build:
@@ -61,6 +119,8 @@ services:
 volumes:
   postgres_data:
     name: inflow_postgres_data
+  mariadb_data:
+    name: inflow_mariadb_data
 
 networks:
   inflow_network:

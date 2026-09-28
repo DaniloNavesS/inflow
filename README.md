@@ -21,6 +21,16 @@ O comando inicia o PostgreSQL, aplica as migrations pendentes e executa a carga.
 make test
 ```
 
+## Comparar PostgreSQL e MariaDB
+
+```bash
+make benchmark
+```
+
+O benchmark reproduz a carga SQL dos jobs nos dois bancos, sem incluir a latência das APIs, e
+gera tabelas em Markdown/JSON para uso na ADR. Detalhes em
+[`benchmark/README.md`](benchmark/README.md).
+
 ## Documentação
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
