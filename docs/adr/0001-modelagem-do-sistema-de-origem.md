@@ -1,210 +1,124 @@
-# 0001 — Adotar PostgreSQL como SGBD relacional do Mandato Aberto
+# 0001 — Espelhamos a origem em modelo CRUD normalizado, com carimbo de ingestão próprio
 
-- **Status:** aceito
-- **Data:** 2026-09-28
-- **Decisores:** equipe do projeto Mandato Aberto
+- **Status:** aceita
+- **Data:** 2026-09-26
+- **Decisores:** Squad InFlow
 
 ## Contexto
 
-O Mandato Aberto necessita de um Sistema Gerenciador de Banco de Dados relacional para armazenar e consultar os dados estruturados processados pelo pipeline de Engenharia de Dados.
+A origem combina APIs públicas do Senado Federal (cadastro por legislatura, mandatos,
+exercícios, filiações, comissões, CEAPS e recursos de gabinete) com o Diário do Senado
+Federal (DSF), fonte documental oficial das listas de comparecimento.
 
-O workload atual inclui dados de senadores, comissões, sessões, despesas e pessoal. Na escala utilizada no benchmark, foram processados:
+A origem é híbrida. CEAPS devolve o ano inteiro reprocessado e pode sobrescrever correções, mas
+`senador/{codigo}/mandatos` e `senador/{codigo}/filiacoes` expõem intervalos históricos. O DSF é
+publicado como documento imutável e precisa ser rastreado por código, URL, páginas e hash. O modelo
+preserva o histórico que a fonte fornece e aplica upsert apenas aos retratos reprocessados.
 
-- 81 registros de senadores;
-- 7.614 registros de comissões;
-- 2.430 registros de sessões;
-- 24.946 registros de despesas;
-- 81 registros de pessoal.
+Carga de trabalho medida (detalhe em [`docs/workload.md`](../workload.md)):
 
-Além da carga inicial, o pipeline deve permitir reprocessamentos idempotentes dos dados, utilizando operações de inserção e atualização sem gerar duplicidades.
+| Tabela | Linhas | Tamanho |
+|---|---|---|
+| `despesas` | 21.430 | 13 MB |
+| `participacoes_comissao` | 7.189 | 1,4 MB |
+| `fornecedores` | 3.516 | 944 kB |
+| `registro_presenca` (prova) | 220 | não medido |
 
-O banco também será utilizado para consultas analíticas, incluindo agregações de despesas por senador e categoria, consultas por senador e período e agregações por fornecedor.
-
-### Cobertura das perguntas de presença
-
-Yan Guimarães testou os endpoints públicos do Senado para verificar se respondiam às perguntas de gestão. Os testes identificaram lacunas nas perguntas 5, 6 e 10, que dependem de dados de comparecimento. A partir dessa análise, o squad avaliou o Diário do Senado Federal (DSF) como fonte documental oficial para presença.
-
-Votação nominal não é suficiente para medir presença: um senador pode comparecer sem votar, e um registro de voto não representa a presença durante toda a sessão.
-
-Os principais critérios considerados para a decisão foram:
-
-- desempenho de carga;
-- desempenho de reprocessamento;
-- latência de consultas analíticas;
-- desempenho de consultas indexadas;
-- armazenamento ocupado;
-- suporte a operações relacionais e agregações;
-- adequação ao workload analítico do projeto.
+Escrita em lote (~33 mil linhas em 90 s, uma vez por dia no pior caso) contra leitura analítica
+frequente. Cardinalidade baixa nas colunas de filtro: 88 senadores, 8 tipos de despesa, 469 datas
+distintas. Latência tolerada: segundos.
 
 ## Alternativas consideradas
 
-### A. PostgreSQL
+**A. Opção nula — consultar a API sob demanda, sem banco.**
+Zero modelagem e zero carga. Descartada: a agregação por senador × tipo × período exige varrer
+21 mil lançamentos a cada pergunta, a API não aceita filtro por senador no endpoint de CEAPS, e
+sem persistência não há como detectar que um lançamento mudou de valor — o que inviabiliza a E2.
 
-SGBD relacional open source com suporte a transações ACID, índices, agregações, funções analíticas e recursos avançados de SQL.
+**B. Insert-only / append, com versionamento de linha.**
+Cada resposta da API gera uma nova versão da linha; a leitura pega a mais recente. Preserva o
+histórico de correções que a origem apaga, o que é justamente a informação interessante do domínio.
+Descartada **para a E1**: a origem reprocessa o ano inteiro a cada chamada, então sem comparação
+campo a campo cada execução geraria 21 mil versões idênticas. Fazer isso direito é o problema da
+E2 (CDC) e depende de um estado anterior confiável — que é o que esta entrega constrói.
 
-Nos testes realizados, apresentou menor latência em todas as consultas medidas, incluindo agregações e consultas indexadas.
-
-Como desvantagem, apresentou menor desempenho que o MariaDB durante o reprocessamento idempotente e ocupou mais espaço para a tabela de despesas no cenário testado.
-
-### B. MariaDB
-
-SGBD relacional open source compatível com grande parte do ecossistema MySQL.
-
-Nos testes realizados, apresentou melhor desempenho nas operações de reprocessamento e em parte das cargas iniciais. Também apresentou menor utilização de armazenamento.
-
-Como desvantagem, apresentou maior latência em todas as consultas analíticas avaliadas, com diferença especialmente significativa na consulta indexada por senador e período.
+**C. Espelhar a origem em CRUD normalizado, com upsert idempotente (escolhida).**
+Uma linha por entidade da origem, chaveada pelo identificador oficial (`CodigoParlamentar`,
+`CodigoComissao`, `id` do lançamento). Reexecutar a carga converge para o mesmo estado.
 
 ## Medição
 
-benchmark disponível na branch `benchmark` do repositório.
+Ambiente reproduzível: `docker compose down -v && docker compose up --build`, PostgreSQL 15,
+dados reais de 2024 (`INGESTION_YEAR=2024`).
 
-O benchmark foi executado em `2026-09-28T13:52:50Z`, utilizando escala `1x` e lotes de `500` registros.
+- **Carga completa do zero:** 90,6 s (81 senadores, 21.430 despesas, 3.516 fornecedores).
+- **Idempotência:** duas cargas completas seguidas deixam as contagens por tabela idênticas
+  (96 / 425 / 7.189 / 190 / 1.086 / 3.516 / 21.430 / 81).
+- **Agregação por senador × tipo de despesa no ano:** `Execution Time: 12,0 ms`.
+- **Recorte por senador e período** (`idx_despesas_senador_data`): `Execution Time: 0,198 ms`.
+- **Restrições barram lixo da origem:** `valor` negativo, UF inexistente e `data_fim < data_inicio`
+  são rejeitados; o ingestor normaliza esses casos antes do insert.
 
-Foram utilizados:
+Normalizar `fornecedores` em tabela própria permite responder quanto cada entidade recebeu e de
+quais senadores. CNPJ e CPF completos são chaves fortes; CPF mascarado usa documento mais nome
+normalizado; documento ausente usa nome mais identificador da despesa. Assim, ausências de documento
+não são colapsadas numa entidade genérica.
 
-- PostgreSQL `15.17`;
-- MariaDB `11.4.13`;
-- mesmo conjunto de dados;
-- mesmas cardinalidades;
-- mesmo ambiente de execução.
+### Presença não é voto
 
-A medição reproduziu os upserts e consultas relacionais utilizados pelos jobs do pipeline.
+Votação nominal foi rejeitada como fonte de assiduidade. Um senador pode comparecer e não votar,
+ou registrar uma ocorrência de votação que não descreve a presença na sessão inteira. A fonte de
+presença escolhida é a seção **Registro de Comparecimento e Voto** (ou **Registro de
+Comparecimento**) do DSF, conforme o tutorial oficial do Senado.
 
-Foram excluídos do teste:
-
-- chamadas HTTP;
-- parsing de JSON;
-- parsing de PDF;
-- períodos de espera;
-- escrita da camada Bronze.
-
-Portanto, os resultados representam o desempenho do SGBD e de seu respectivo driver, e não o tempo total do pipeline.
-
-Os resultados são locais e não devem ser generalizados para outros ambientes sem repetição do benchmark.
-
-### Carga inicial
-
-| Job | PostgreSQL | MariaDB |
-|---|---:|---:|
-| senators | 0,009 s | 0,021 s |
-| committees | 0,508 s | 0,748 s |
-| sessions | 0,145 s | 0,210 s |
-| expenses | 2,020 s | 1,380 s |
-| staff | 0,014 s | 0,010 s |
-
-O PostgreSQL foi mais rápido nas cargas de senadores, comissões e sessões. O MariaDB apresentou melhor desempenho nas cargas de despesas e pessoal.
-
-Na carga de despesas, que representa o maior conjunto do benchmark, o MariaDB executou a operação aproximadamente **31,7% mais rápido**.
-
-### Reprocessamento idempotente
-
-| Job | PostgreSQL | MariaDB |
-|---|---:|---:|
-| senators | 0,012 s | 0,010 s |
-| committees | 0,335 s | 0,143 s |
-| sessions | 0,117 s | 0,048 s |
-| expenses | 1,507 s | 0,500 s |
-| staff | 0,013 s | 0,002 s |
-
-O MariaDB apresentou menor tempo em todos os testes de reprocessamento.
-
-Para o conjunto de despesas, o MariaDB realizou o reprocessamento em `0,500 s`, enquanto o PostgreSQL levou `1,507 s`, representando redução de aproximadamente **66,8% no tempo de execução**.
-
-### Consultas com cache quente
-
-| Consulta | PostgreSQL p50 | MariaDB p50 | PostgreSQL p95 | MariaDB p95 |
-|---|---:|---:|---:|---:|
-| aggregate_senator_type | 15,073 ms | 17,410 ms | 15,516 ms | 17,658 ms |
-| indexed_senator_period | 0,616 ms | 1,944 ms | 0,745 ms | 2,135 ms |
-| supplier_totals | 8,371 ms | 10,581 ms | 8,618 ms | 10,741 ms |
-
-O PostgreSQL apresentou menor latência em todas as consultas avaliadas.
-
-Na mediana (`p50`):
-
-- `aggregate_senator_type`: aproximadamente **13,4% menor latência**;
-- `indexed_senator_period`: aproximadamente **68,3% menor latência**;
-- `supplier_totals`: aproximadamente **20,9% menor latência**.
-
-A maior diferença ocorreu na consulta indexada por senador e período. O MariaDB apresentou p50 de `1,944 ms`, enquanto o PostgreSQL apresentou `0,616 ms`. Nesse cenário, a consulta no PostgreSQL foi aproximadamente **3,16 vezes mais rápida**.
-
-### Armazenamento
-
-| Banco | Tamanho da tabela `despesas` |
-|---|---:|
-| PostgreSQL | 10.125.312 bytes |
-| MariaDB | 7.946.240 bytes |
-
-O MariaDB utilizou aproximadamente **21,5% menos espaço** para a tabela avaliada.
+Cada registro mantém `documento_dsf_id` e página. O voto é um booleano separado e nunca determina
+a presença. Falha do parser fica em `documento_dsf.status_parser`; nome ambíguo fica sem
+`senador_id`. Ausência de linha, ausência de voto ou falha de extração nunca gera uma ausência.
 
 ## Decisão
 
-Adotamos o **PostgreSQL** como SGBD relacional do Mandato Aberto.
+Espelhamos a origem em **modelo CRUD normalizado** (7 tabelas, 3FN), com `ON CONFLICT DO UPDATE`
+pela chave natural do Senado, e guardamos **três carimbos de tempo com papéis distintos**:
 
-Embora o MariaDB tenha apresentado melhor desempenho nas operações de reprocessamento e menor utilização de armazenamento, o PostgreSQL apresentou menor latência em todas as consultas analíticas avaliadas.
+- **tempo de evento** — `despesas.data_despesa`, `sessao_plenaria.data_sessao`, `participacoes_comissao.data_inicio`:
+  quando o fato ocorreu no mundo. É o eixo de qualquer análise temporal.
+- **tempo de ingestão** — `timestamp_ingestao`: quando a linha entrou no banco. Imutável.
+- **tempo de processamento** — `atualizado_em`, mantido por trigger: quando o ingestor tocou a linha
+  pela última vez. É o sinal bruto de que a origem mudou algo.
 
-A decisão prioriza o desempenho de leitura e consulta, pois o banco será utilizado principalmente como camada estruturada para análises sobre os dados processados pelo pipeline.
-
-A diferença observada nas operações de escrita não representa, no cenário atual, uma limitação operacional relevante. A maior carga testada possui 24.946 registros e foi processada por ambos os bancos em poucos segundos.
-
-Em contrapartida, as consultas constituem operações recorrentes sobre os dados persistidos. O PostgreSQL apresentou vantagem especialmente relevante em consultas indexadas, com p50 de `0,616 ms`, contra `1,944 ms` do MariaDB.
-
-Portanto, considerando o workload atual e o perfil predominantemente analítico do Mandato Aberto, o desempenho superior de leitura e agregação recebeu maior peso na decisão do que a vantagem do MariaDB em carga e reprocessamento.
+Não desnormalizamos nada nesta entrega. `estrutura_gabinete.qtd_total_servidores` é coluna gerada,
+não duplicação, e `despesas.ano`/`mes` são redundantes com `data_despesa` de propósito: vêm da
+origem e sustentam o índice `(ano, mes)` usado nos recortes mensais.
 
 ## Consequências
 
-**O que ganhamos:**
+**Ganhos.** A carga é idempotente e reexecutável sem passo manual. O esquema recusa dado inválido
+em vez de aceitar tudo como `TEXT`. As chaves naturais oficiais tornam a reconciliação com a fonte
+trivial.
 
-- menor latência nas consultas avaliadas;
-- melhor desempenho nas consultas indexadas do benchmark;
-- melhor desempenho nas agregações utilizadas pelo projeto;
-- SGBD adequado ao perfil analítico do Mandato Aberto;
-- suporte amplo a SQL, agregações, índices e recursos analíticos;
-- manutenção de uma arquitetura baseada em tecnologia open source.
+**Limitação conhecida.** O `ON CONFLICT DO UPDATE` atual toca a linha mesmo quando nada mudou:
+após a segunda carga, `atualizado_em > timestamp_ingestao` em 21.430 de 21.430 despesas. Ou seja,
+`atualizado_em` hoje marca "o ingestor passou aqui", não "a origem mudou". Tornar o UPDATE
+condicional (`WHERE valor IS DISTINCT FROM EXCLUDED.valor OR ...`) é pré-requisito do CDC da E2.
 
-**O que perdemos:**
+**Perdas.** Correções retroativas da CEAPS são **perdidas**: se um lançamento de R$ 10.000 vira
+R$ 8.000, sobrescrevemos e a versão antiga desaparece. Perdemos também quem saiu do exercício —
+quando nem a lista por legislatura nem os endpoints históricos registrarem a pessoa. Partido e UF
+desconhecidos ficam nulos; não se fabrica `S/PART` nem `DF`.
 
-- reprocessamentos mais lentos em comparação ao MariaDB no benchmark atual;
-- maior utilização de armazenamento;
-- menor throughput em determinadas operações de escrita.
+**Irreversibilidade.** Nenhuma estrutural: o esquema sobe do zero por migrações. Mas o histórico
+não capturado entre hoje e a implantação do CDC é **irrecuperável** — a origem não o guarda.
 
-No cenário de despesas, por exemplo, o reprocessamento levou `1,507 s` no PostgreSQL e `0,500 s` no MariaDB.
-
-A tabela de despesas também ocupou aproximadamente `10,1 MB` no PostgreSQL contra `7,9 MB` no MariaDB.
-
-Essas diferenças foram consideradas aceitáveis porque o volume atual é pequeno e os tempos absolutos permanecem baixos.
-
-**O que se torna irreversível:**
-
-A decisão não é estritamente irreversível, pois ambos os bancos utilizam modelos relacionais e SQL.
-
-Entretanto, à medida que o projeto evoluir, podem ser utilizados recursos específicos do PostgreSQL, como tipos de dados, funções, índices, sintaxe de upsert e funcionalidades analíticas próprias do SGBD.
-
-Nesse cenário, uma migração futura para MariaDB exigiria:
-
-- revisão do esquema;
-- revisão das consultas SQL;
-- adaptação dos scripts de carga;
-- adequação das operações de upsert;
-- testes de integridade;
-- repetição dos testes de desempenho;
-- migração e validação dos dados existentes.
-
-Portanto, o custo de substituição tende a aumentar conforme o projeto passa a depender de funcionalidades específicas do PostgreSQL.
+Os 4 lançamentos com data anterior a 2000 (o menor é `0202-07-04`) são erro de digitação na fonte
+e ficam preservados como estão; corrigi-los é decisão da camada analítica, não do espelho.
 
 ## Gatilho de revisão
 
-Esta decisão deverá ser revisada caso ocorram mudanças significativas no workload do Mandato Aberto.
+Migramos para insert-only (alternativa B) quando **qualquer** limiar for atingido:
 
-A avaliação deverá ser repetida caso:
+- mais de **1% das linhas de `despesas`** mudar de valor entre duas cargas consecutivas;
+- a pergunta de gestão passar a exigir "o que a origem dizia na data X";
+- `despesas` passar de **5 milhões de linhas**, quando o custo do upsert em massa supera o do append.
 
-- o volume de dados cresça em uma ordem de magnitude em relação ao benchmark atual;
-- operações de escrita ou reprocessamento passem a representar o principal gargalo do pipeline;
-- o tempo de reprocessamento deixe de atender ao SLA definido para o projeto;
-- o armazenamento utilizado pelo PostgreSQL passe a representar uma restrição relevante de infraestrutura;
-- o padrão de consultas do sistema seja significativamente alterado;
-- seja adotada uma infraestrutura diferente da utilizada neste benchmark.
-
-Como referência inicial, um novo benchmark deverá ser considerado quando o conjunto de despesas atingir aproximadamente **250 mil registros**, dez vezes o volume avaliado nesta decisão.
-
-A continuidade do PostgreSQL deverá ser reavaliada com base nos mesmos critérios utilizados neste ADR, preservando a comparação entre carga, reprocessamento, consultas e utilização de armazenamento.
+Medir o primeiro limiar depende de tornar o UPDATE condicional, conforme a limitação acima; até lá
+o gatilho é verificado manualmente, comparando o total reembolsado do ano entre duas cargas.
