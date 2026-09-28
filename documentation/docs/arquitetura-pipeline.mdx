@@ -1,17 +1,17 @@
 ---
 sidebar_position: 3
 title: Arquitetura do pipeline
-description: Arquitetura, fluxo de execução, persistência e observabilidade do pipeline de dados do InFlow.
+description: Arquitetura, fluxo de execução, persistência e observabilidade do pipeline de dados do Mandato Aberto.
 ---
 
 # Arquitetura do pipeline
 
-O InFlow executa um pipeline de dados em lote que coleta informações públicas do Senado Federal,
+O Mandato Aberto executa um pipeline de dados em lote que coleta informações públicas do Senado Federal,
 preserva as respostas originais e mantém uma fonte transacional normalizada em PostgreSQL. A
 arquitetura prioriza reprocessamento seguro, rastreabilidade da origem e separação entre dado bruto,
 dado operacional e metadados de execução.
 
-![Arquitetura do pipeline InFlow, das fontes oficiais aos schemas Bronze, OLTP e Monitoring](./img/arquitetura_inflow.jpg)
+![Arquitetura do pipeline Mandato Aberto, das fontes oficiais aos schemas Bronze, OLTP e Monitoring](./img/arquitetura_inflow.jpg)
 
 ## Fluxo de uma execução
 
