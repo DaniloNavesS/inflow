@@ -1,0 +1,52 @@
+---
+title: Fluxo de Git e revisão
+sidebar_label: Fluxo de Git e revisão
+---
+
+# Fluxo de Git e revisão
+
+## Branches
+
+`main` é a branch de entrega: o que está nela é o que a monitoria corrige. Ninguém faz commit
+direto em `main`.
+
+| Prefixo | Uso | Exemplo |
+|---|---|---|
+| `feat/` | nova funcionalidade (tabela, job, endpoint) | `feat/e1-migracoes-e-documentacao` |
+| `fix/` | correção de comportamento | `fix/e1-escopo-modelagem` |
+| `docs/` | somente documentação | `docs/ajuste-documentacao` |
+| `integration/` | branch temporária para juntar frentes que se tocam antes de ir para `main` | `integration/e1-adr-norm` |
+
+## Commits
+
+Seguimos o padrão [Conventional Commits](https://www.conventionalcommits.org/pt-br/), em português:
+
+```text
+feat: implementa cargas históricas e presença
+fix: corrige identidade de fornecedores
+docs: consolida escopo da E1
+test: valida monitoramento da carga
+refactor: separa jobs por dominio
+chore: limita ambiente ao escopo da E1
+```
+
+Um commit deve fazer uma coisa só. Mensagens como `fix merge` escondem o que mudou e tornam a
+revisão impossível — prefira descrever o efeito (`fix: resolve conflito mantendo migrate.sh`).
+
+## Pull Requests
+
+Todo trabalho entra em `main` por Pull Request. A descrição do PR responde:
+
+1. **O que muda** — tabelas, jobs, endpoints ou páginas afetadas.
+2. **Como verificar** — comandos exatos (normalmente `make clean && make test`).
+3. **O que pode quebrar** — migrações, contagens medidas, links da documentação.
+
+### Checklist do revisor
+
+- [ ] O ambiente sobe do zero (`make clean && make ingestion`) sem passo manual.
+- [ ] `make test` passa.
+- [ ] Toda tabela nova tem chave primária, `NOT NULL` onde a origem garante valor, chaves
+      estrangeiras e `CHECK` para domínios fechados.
+- [ ] Mudança de esquema entrou como **nova migração**; migração já aplicada não é editada.
+- [ ] Números citados na documentação (linhas, tempos, latências) continuam verdadeiros.
+- [ ] Em conflito de merge, o revisor confere **arquivo a arquivo** o que cada lado removeu.
