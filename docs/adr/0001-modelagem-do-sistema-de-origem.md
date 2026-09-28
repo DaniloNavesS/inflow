@@ -20,6 +20,12 @@ Além da carga inicial, o pipeline deve permitir reprocessamentos idempotentes d
 
 O banco também será utilizado para consultas analíticas, incluindo agregações de despesas por senador e categoria, consultas por senador e período e agregações por fornecedor.
 
+### Cobertura das perguntas de presença
+
+Yan Guimarães testou os endpoints públicos do Senado para verificar se respondiam às perguntas de gestão. Os testes identificaram lacunas nas perguntas 5, 6 e 10, que dependem de dados de comparecimento. A partir dessa análise, o squad avaliou o Diário do Senado Federal (DSF) como fonte documental oficial para presença.
+
+Votação nominal não é suficiente para medir presença: um senador pode comparecer sem votar, e um registro de voto não representa a presença durante toda a sessão.
+
 Os principais critérios considerados para a decisão foram:
 
 - desempenho de carga;

@@ -100,7 +100,7 @@ Onde há redundância, ela é deliberada:
 | `senadores.partido` e `senadores.uf` | Retrato do momento da coleta, útil para o perfil atual. Para fatos passados, use o histórico de filiações e mandatos (pendente). |
 
 Não há desnormalização para desempenho: com ~34 mil linhas por ano, a agregação mais cara leva
-12 ms (ver [ADR 0002](./adr/0002-modelagem-do-sistema-de-origem.md#medição)). Desnormalizar
+12 ms (ver [Caracterização da carga](./metrics/workload.md#padrão-de-acesso)). Desnormalizar
 só se justifica quando uma medição mostrar o contrário.
 
 ## Como a origem trata histórico
@@ -136,7 +136,7 @@ A própria origem é híbrida:
 | Quantos lançamentos a fonte corrigiu entre duas cargas? | Ainda não: exige UPDATE condicional e CDC (E2) |
 | Qual era o partido do senador na data da despesa? | Ainda não: depende do histórico de filiações (pendente) |
 
-A escolha e seus limites estão justificados na [ADR 0002](./adr/0002-modelagem-do-sistema-de-origem.md).
+A escolha do SGBD e seus limites estão justificados na [ADR 0001](./adr/0001-modelagem-do-sistema-de-origem.md).
 
 ## Carimbos de tempo
 
