@@ -9,6 +9,16 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "inflow_pass")
 INGESTION_YEAR = int(os.getenv("INGESTION_YEAR", "2024"))
 LIMIT_SENADORES = int(os.getenv("LIMIT_SENADORES", "0"))  # 0 para processar todos
 
+# Dados abertos do CNPJ (Receita Federal): sócios e empresas dos fornecedores da CEAPS
+ENABLE_CNPJ_OWNERS = os.getenv("ENABLE_CNPJ_OWNERS", "1") == "1"
+RFB_CNPJ_BASE_URL = os.getenv(
+    "RFB_CNPJ_BASE_URL",
+    "https://arquivos.receitafederal.gov.br/public.php/webdav/Dados/Cadastros/CNPJ",
+)
+RFB_CNPJ_TOKEN = os.getenv("RFB_CNPJ_TOKEN", "gn672Ad4CF8N6TK")  
+RFB_CNPJ_MONTH = os.getenv("RFB_CNPJ_MONTH", "")  
+CNPJ_CACHE_DIR = os.getenv("CNPJ_CACHE_DIR", "/cache/cnpj")
+
 REQUEST_HEADERS = {
     "Accept": "application/json",
     "User-Agent": (

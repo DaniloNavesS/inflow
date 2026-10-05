@@ -17,7 +17,9 @@ def log_database_summary(conn: psycopg2.extensions.connection):
         "oltp.registro_presenca",
         "oltp.fornecedores",
         "oltp.despesas",
-        "oltp.estrutura_gabinete"
+        "oltp.estrutura_gabinete",
+        "oltp.empresas",
+        "oltp.socios",
     ]
 
     logger.info("==================================================")

@@ -2,9 +2,10 @@ import logging
 import sys
 import time
 from clients.senate import get_resilient_session
-from config import INGESTION_YEAR
+from config import ENABLE_CNPJ_OWNERS, INGESTION_YEAR
 from database.postgres import wait_for_database
 from jobs.attendance import ingest_dsf_attendance
+from jobs.cnpj_owners import ingest_cnpj_owners
 from jobs.committees import ingest_comissoes_e_participacoes
 from jobs.expenses import ingest_ceaps_despesas
 from jobs.senators import ingest_senadores
@@ -53,10 +54,15 @@ def execute_monitored_job(
     try:
         result = function(*args, **kwargs)
         duration = time.perf_counter() - start_time
+        # Jobs que devolvem contadores (records_read, records_written...) os registram em job_runs.
+        counters = result if isinstance(result, dict) and all(
+            key.startswith("records_") for key in result
+        ) else {}
         finish_job(
             conn=conn,
             job_id=job_id,
             duration_seconds=duration,
+            **counters,
         )
         return result
 
@@ -160,6 +166,27 @@ def main():
             run_id,
         )
 
+        # 7. Sócios e dados cadastrais (RFB) dos fornecedores. Enriquecimento opcional:
+        # depende de um servidor externo lento, então a falha fica registrada em
+        # monitoring.job_runs sem invalidar a carga do Senado.
+        if ENABLE_CNPJ_OWNERS:
+            try:
+                execute_monitored_job(
+                    conn,
+                    run_id,
+                    "cnpj_owners",
+                    ingest_cnpj_owners,
+                    conn,
+                    run_id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Job cnpj_owners falhou; carga do Senado mantida: %s",
+                    exc,
+                )
+        else:
+            logger.info("Job cnpj_owners desativado (ENABLE_CNPJ_OWNERS=0).")
+
         # Auditoria
         log_database_summary(conn)
 
@@ -203,5 +230,34 @@ def main():
     finally:
         conn.close()
 
+def main_cnpj():
+    """Executa só o enriquecimento RFB, sobre os fornecedores já carregados."""
+    pipeline_start = time.perf_counter()
+    conn = wait_for_database()
+    run_id = start_pipeline(conn=conn, pipeline_name="rfb_cnpj_enrichment")
+    try:
+        execute_monitored_job(conn, run_id, "cnpj_owners", ingest_cnpj_owners, conn, run_id)
+        log_database_summary(conn)
+        finish_pipeline(
+            conn=conn,
+            run_id=run_id,
+            duration_seconds=time.perf_counter() - pipeline_start,
+        )
+    except Exception as exc:
+        conn.rollback()
+        fail_pipeline(
+            conn=conn,
+            run_id=run_id,
+            duration_seconds=time.perf_counter() - pipeline_start,
+            error_message=str(exc),
+        )
+        logger.exception("Erro no enriquecimento RFB: %s", exc)
+        sys.exit(1)
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["cnpj"]:
+        main_cnpj()
+    else:
+        main()

@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down stop restart ps logs ingestion build-ingestion db-shell clean
+.PHONY: up down stop restart ps logs ingestion build-ingestion cnpj test docs docs-build db-shell clean
 
 up:
 	$(COMPOSE) up -d postgres
@@ -18,13 +18,17 @@ ps:
 	$(COMPOSE) ps
 
 logs:
-	$(COMPOSE) logs -f postgres migrate ingestion
+	$(COMPOSE) logs -f postgres ingestion
 
 build-ingestion:
 	$(COMPOSE) build ingestion
 
 ingestion: up
 	$(COMPOSE) run --rm ingestion
+
+
+cnpj: up
+	$(COMPOSE) run --rm ingestion python main.py cnpj
 
 test: ingestion
 	$(COMPOSE) run --rm ingestion pytest -q -p no:cacheprovider /tests
