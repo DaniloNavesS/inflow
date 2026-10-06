@@ -38,6 +38,8 @@ def reset_test_data(conn):
     with conn.cursor() as cur:
         cur.execute("DROP TRIGGER IF EXISTS trg_test_fail_cnpj_socio ON oltp.socios")
         cur.execute("DROP FUNCTION IF EXISTS oltp.test_fail_cnpj_socio()")
+        cur.execute("DROP TRIGGER IF EXISTS trg_test_fail_cnpj_delete ON oltp.socios")
+        cur.execute("DROP FUNCTION IF EXISTS oltp.test_fail_cnpj_delete()")
         cur.execute("""
             TRUNCATE TABLE
                 bronze.raw_payloads,
@@ -164,6 +166,21 @@ def snapshot(conn):
         """)
         evidence = cur.fetchall()
     return companies, partners, evidence
+
+
+def evidence_metadata(conn, test_name):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, source_url, content_sha256, payload::text,
+                   last_seen_at, run_id, last_run_id, batch_id
+            FROM bronze.raw_payloads
+            WHERE source_url LIKE %s
+            ORDER BY source_url, content_sha256
+            """,
+            (f"https://rfb.test/{test_name}/%",),
+        )
+        return cur.fetchall()
 
 
 def test_first_load_links_only_complete_supplier_cnpjs_and_preserves_rfb_fields(cnpj_db, monkeypatch, tmp_path):
@@ -383,3 +400,274 @@ def test_failed_monitored_persistence_rolls_back_bronze_and_business_then_can_re
         assert cur.fetchone()[0] == 2
         cur.execute("SELECT status FROM monitoring.job_runs WHERE run_id=%s", (str(successful_run),))
         assert cur.fetchone()[0] == "success"
+
+
+def partner_snapshot(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT cnpj_basico, data_referencia, nome_socio, documento_socio,
+                   data_entrada, id, timestamp_ingestao
+            FROM oltp.socios
+            ORDER BY cnpj_basico, data_referencia, nome_socio
+        """)
+        return cur.fetchall()
+
+
+def test_corrected_month_updates_and_reconciles_only_processed_companies(
+    cnpj_db, monkeypatch, tmp_path
+):
+    add_suppliers(cnpj_db, [CNPJ_A, CNPJ_B])
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "reconcile",
+        "2026-09",
+        [company_row(COMPANY_A), company_row(COMPANY_B, "EMPRESA B")],
+        [
+            partner_row(COMPANY_A, "ANA A"),
+            partner_row(COMPANY_A, "BIA B", "***654321**"),
+            partner_row(COMPANY_A, "DAVI REMOVIDO", "***000111**"),
+            partner_row(COMPANY_B, "SOCIO B", "***222333**"),
+        ],
+    )
+    _result, run_id = run_job(cnpj_db, "reconcile")
+    before = {(row[0], row[2]): row for row in partner_snapshot(cnpj_db)}
+
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "reconcile",
+        "2026-08",
+        [company_row(COMPANY_A, "EMPRESA A AGOSTO")],
+        [partner_row(COMPANY_A, "SOCIO AGOSTO", "***888999**")],
+    )
+    cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "reconcile",
+        "2026-09",
+        [company_row(COMPANY_A, "EMPRESA A CORRIGIDA")],
+        [
+            partner_row(COMPANY_A, "ANA A", joined="20200102"),
+            partner_row(COMPANY_A, "BIA B", "***654321**"),
+            partner_row(COMPANY_A, "CARLA NOVA", "***777888**"),
+        ],
+    )
+    cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+
+    after = {(row[0], row[2]): row for row in partner_snapshot(cnpj_db)}
+    sep = datetime.date(2026, 9, 1)
+    aug = datetime.date(2026, 8, 1)
+    assert after[(COMPANY_A, "ANA A")][4] == datetime.date(2020, 1, 2)
+    assert {
+        row[2] for row in after.values()
+        if row[0] == COMPANY_A and row[1] == sep
+    } == {"ANA A", "BIA B", "CARLA NOVA"}
+    assert after[(COMPANY_A, "ANA A")][5:] == before[(COMPANY_A, "ANA A")][5:]
+    assert after[(COMPANY_A, "BIA B")][5:] == before[(COMPANY_A, "BIA B")][5:]
+    assert (COMPANY_A, "DAVI REMOVIDO") not in after
+    assert (COMPANY_A, "SOCIO AGOSTO") in after
+    assert (COMPANY_B, "SOCIO B") in after
+    assert after[(COMPANY_A, "SOCIO AGOSTO")][1] == aug
+    with cnpj_db.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT data_referencia
+            FROM oltp.vw_socios_fornecedores
+            WHERE cnpj_cpf IN (%s, %s)
+        """, (CNPJ_A, CNPJ_B))
+        assert cur.fetchall() == [(sep,)]
+        cur.execute("SELECT count(*) FROM bronze.raw_payloads")
+        evidence_before_repeat = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT count(*), count(DISTINCT content_sha256)
+            FROM bronze.raw_payloads
+            WHERE entity_type = 'rfb_socios'
+              AND source_url = 'https://rfb.test/reconcile/2026-09/Socios*.zip'
+            """
+        )
+        assert cur.fetchone() == (2, 2)
+
+    corrected = snapshot(cnpj_db)
+    cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+    assert snapshot(cnpj_db) == corrected
+    with cnpj_db.cursor() as cur:
+        cur.execute("SELECT count(*) FROM bronze.raw_payloads")
+        assert cur.fetchone()[0] == evidence_before_repeat
+
+
+def test_removed_partner_does_not_remain_after_same_month_replay(cnpj_db, monkeypatch, tmp_path):
+    add_suppliers(cnpj_db, [CNPJ_A])
+    install_source(
+        monkeypatch, tmp_path, "removed_partner", "2026-09",
+        [company_row(COMPANY_A)],
+        [partner_row(COMPANY_A, "ANA MANTIDA"), partner_row(COMPANY_A, "DAVI REMOVIDO", "***000111**")],
+    )
+    _result, run_id = run_job(cnpj_db, "removed_partner")
+
+    install_source(
+        monkeypatch, tmp_path, "removed_partner", "2026-09",
+        [company_row(COMPANY_A)], [partner_row(COMPANY_A, "ANA MANTIDA")],
+    )
+    cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+
+    assert {row[2] for row in partner_snapshot(cnpj_db)} == {"ANA MANTIDA"}
+
+
+def test_valid_company_with_no_partners_reconciles_to_empty(cnpj_db, monkeypatch, tmp_path):
+    add_suppliers(cnpj_db, [CNPJ_A])
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "empty_qsa",
+        "2026-09",
+        [company_row(COMPANY_A)],
+        [partner_row(COMPANY_A)],
+    )
+    _result, run_id = run_job(cnpj_db, "empty_qsa")
+    assert len(partner_snapshot(cnpj_db)) == 1
+
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "empty_qsa",
+        "2026-09",
+        [company_row(COMPANY_A)],
+        [],
+    )
+    cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+
+    assert partner_snapshot(cnpj_db) == []
+    with cnpj_db.cursor() as cur:
+        cur.execute("SELECT count(*) FROM oltp.empresas")
+        assert cur.fetchone()[0] == 1
+        cur.execute("SELECT count(*) FROM oltp.vw_socios_fornecedores")
+        assert cur.fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("invalid_input", ["missing_file", "rejected_row", "orphan_row"])
+def test_incomplete_or_rejected_snapshot_keeps_last_valid_qsa(
+    cnpj_db, monkeypatch, tmp_path, invalid_input
+):
+    add_suppliers(cnpj_db, [CNPJ_A])
+    install_source(
+        monkeypatch,
+        tmp_path,
+        f"invalid_{invalid_input}",
+        "2026-09",
+        [company_row(COMPANY_A)],
+        [partner_row(COMPANY_A)],
+    )
+    _result, run_id = run_job(cnpj_db, f"invalid_{invalid_input}")
+    before = snapshot(cnpj_db)
+
+    if invalid_input == "missing_file":
+        install_source(
+            monkeypatch,
+            tmp_path,
+            f"invalid_{invalid_input}",
+            "2026-09",
+            [company_row(COMPANY_A)],
+            [],
+            missing_file="Socios9.zip",
+        )
+    elif invalid_input == "rejected_row":
+        install_source(
+            monkeypatch,
+            tmp_path,
+            f"invalid_{invalid_input}",
+            "2026-09",
+            [company_row(COMPANY_A)],
+            [[COMPANY_A, "2"]],
+        )
+    else:
+        install_source(
+            monkeypatch,
+            tmp_path,
+            f"invalid_{invalid_input}",
+            "2026-09",
+            [],
+            [partner_row(COMPANY_A)],
+        )
+
+    with pytest.raises(RuntimeError):
+        cnpj_owners.ingest_cnpj_owners(cnpj_db, run_id)
+    assert snapshot(cnpj_db) == before
+
+
+def test_failed_reconciliation_rolls_back_updates_deletes_and_bronze_then_can_retry(
+    cnpj_db, monkeypatch, tmp_path
+):
+    add_suppliers(cnpj_db, [CNPJ_A])
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "reconcile_rollback",
+        "2026-09",
+        [company_row(COMPANY_A)],
+        [
+            partner_row(COMPANY_A, "ANA A"),
+            partner_row(COMPANY_A, "DAVI REMOVIDO", "***000111**"),
+        ],
+    )
+    _result, _initial_run = run_job(cnpj_db, "reconcile_rollback")
+    before = snapshot(cnpj_db)
+    partners_before = partner_snapshot(cnpj_db)
+    bronze_before = evidence_metadata(cnpj_db, "reconcile_rollback")
+
+    install_source(
+        monkeypatch,
+        tmp_path,
+        "reconcile_rollback",
+        "2026-09",
+        [company_row(COMPANY_A, "EMPRESA CORRIGIDA")],
+        [
+            partner_row(COMPANY_A, "ANA A", joined="20200102"),
+            partner_row(COMPANY_A, "CARLA NOVA", "***777888**"),
+        ],
+    )
+    with cnpj_db.cursor() as cur:
+        cur.execute("""
+            CREATE FUNCTION oltp.test_fail_cnpj_delete() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'synthetic reconciliation failure';
+            END;
+            $$ LANGUAGE plpgsql
+        """)
+        cur.execute("""
+            CREATE TRIGGER trg_test_fail_cnpj_delete
+            BEFORE DELETE ON oltp.socios
+            FOR EACH ROW EXECUTE FUNCTION oltp.test_fail_cnpj_delete()
+        """)
+    cnpj_db.commit()
+
+    failed_run = start_pipeline(cnpj_db, "cnpj_reconciliation_failure")
+    with pytest.raises(psycopg2.Error, match="synthetic reconciliation failure"):
+        execute_monitored_job(
+            cnpj_db, failed_run, "cnpj_owners",
+            cnpj_owners.ingest_cnpj_owners, cnpj_db, failed_run,
+        )
+    assert snapshot(cnpj_db) == before
+    assert partner_snapshot(cnpj_db) == partners_before
+    assert evidence_metadata(cnpj_db, "reconcile_rollback") == bronze_before
+    with cnpj_db.cursor() as cur:
+        cur.execute("SELECT status FROM monitoring.job_runs WHERE run_id=%s", (str(failed_run),))
+        assert cur.fetchone()[0] == "failed"
+
+    with cnpj_db.cursor() as cur:
+        cur.execute("DROP TRIGGER trg_test_fail_cnpj_delete ON oltp.socios")
+        cur.execute("DROP FUNCTION oltp.test_fail_cnpj_delete()")
+    cnpj_db.commit()
+
+    successful_run = start_pipeline(cnpj_db, "cnpj_reconciliation_retry")
+    execute_monitored_job(
+        cnpj_db, successful_run, "cnpj_owners",
+        cnpj_owners.ingest_cnpj_owners, cnpj_db, successful_run,
+    )
+    after = {(row[0], row[2]): row for row in partner_snapshot(cnpj_db)}
+    assert set(name for root, name in after if root == COMPANY_A) == {"ANA A", "CARLA NOVA"}
+    assert after[(COMPANY_A, "ANA A")][4] == datetime.date(2020, 1, 2)
+    assert after[(COMPANY_A, "ANA A")][5:] == partners_before[0][5:]
+    assert (COMPANY_A, "DAVI REMOVIDO") not in after

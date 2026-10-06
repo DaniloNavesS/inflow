@@ -306,10 +306,19 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
             empresas[record[0]] = record
         logger.info("RFB: %s lido (%d linhas varridas até aqui).", path.name, read)
 
+    if rejected:
+        raise RuntimeError(
+            f"RFB rejeitou {rejected} linha(s) de empresas ou sócios; "
+            "reconciliação do retrato cancelada."
+        )
+
     # Sócio só entra se a empresa do mesmo retrato existe (FK composta).
     orphan = [key for key, record in socios.items() if record[0] not in empresas]
-    for key in orphan:
-        del socios[key]
+    if orphan:
+        raise RuntimeError(
+            f"RFB retornou {len(orphan)} vínculo(s) sem empresa no mesmo retrato; "
+            "reconciliação cancelada."
+        )
 
     try:
         upsert_lookup(conn, "qualificacoes_socio", qualificacoes)
@@ -372,10 +381,58 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
                     qualificacao, data_entrada, pais, documento_representante,
                     nome_representante, qualificacao_representante, faixa_etaria
                 ) VALUES %s
-                ON CONFLICT ON CONSTRAINT unq_socios_retrato DO NOTHING;
+                ON CONFLICT ON CONSTRAINT unq_socios_retrato DO UPDATE SET
+                    data_entrada = EXCLUDED.data_entrada,
+                    pais = EXCLUDED.pais,
+                    documento_representante = EXCLUDED.documento_representante,
+                    nome_representante = EXCLUDED.nome_representante,
+                    qualificacao_representante = EXCLUDED.qualificacao_representante,
+                    faixa_etaria = EXCLUDED.faixa_etaria
+                WHERE (oltp.socios.data_entrada, oltp.socios.pais,
+                       oltp.socios.documento_representante, oltp.socios.nome_representante,
+                       oltp.socios.qualificacao_representante, oltp.socios.faixa_etaria)
+                    IS DISTINCT FROM
+                      (EXCLUDED.data_entrada, EXCLUDED.pais,
+                       EXCLUDED.documento_representante, EXCLUDED.nome_representante,
+                       EXCLUDED.qualificacao_representante, EXCLUDED.faixa_etaria);
                 """,
                 list(socios.values()),
                 page_size=1000,
+            )
+            # Reconcile only the current snapshot and companies present in this Empresas file.
+            cur.execute(
+                """
+                DELETE FROM oltp.socios AS stored
+                WHERE stored.data_referencia = %s
+                  AND stored.cnpj_basico = ANY(%s::char(8)[])
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM unnest(
+                          %s::char(8)[],
+                          %s::smallint[],
+                          %s::text[],
+                          %s::text[],
+                          %s::smallint[]
+                      ) AS expected(
+                          cnpj_basico, tipo_socio, nome_socio,
+                          documento_socio, qualificacao
+                      )
+                      WHERE expected.cnpj_basico = stored.cnpj_basico
+                        AND expected.tipo_socio = stored.tipo_socio
+                        AND expected.nome_socio = stored.nome_socio
+                        AND expected.documento_socio IS NOT DISTINCT FROM stored.documento_socio
+                        AND expected.qualificacao = stored.qualificacao
+                  )
+                """,
+                (
+                    reference,
+                    list(empresas),
+                    [record[0] for record in socios.values()],
+                    [record[2] for record in socios.values()],
+                    [record[3] for record in socios.values()],
+                    [record[4] for record in socios.values()],
+                    [record[5] for record in socios.values()],
+                ),
             )
         conn.commit()
     except Exception:
