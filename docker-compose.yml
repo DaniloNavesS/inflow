@@ -11,6 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ./scripts/sql/oltp/012_cnpj_owners.sql:/migrations/012_cnpj_owners.sql:roZ
       - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
       - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:

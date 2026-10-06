@@ -2,18 +2,19 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
 		'Comandos disponíveis:' \
-		'  make start            Sobe o PostgreSQL em segundo plano' \
+		'  make start            Sobe e aguarda o PostgreSQL ficar saudável' \
 		'  make down             Derruba os contêineres' \
 		'  make stop             Para os contêineres sem removê-los' \
 		'  make restart          Reinicia o PostgreSQL' \
 		'  make ps               Lista os contêineres' \
 		'  make logs             Acompanha os logs' \
 		'  make ingestion        Executa a ingestão' \
+		'  make migrate-cnpj     Aplica o esquema CNPJ em banco existente' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -23,7 +24,7 @@ help:
 		'  make clean            Derruba os contêineres e remove os volumes'
 
 start:
-	$(COMPOSE) up -d postgres
+	$(COMPOSE) up -d --wait postgres
 
 down:
 	$(COMPOSE) down
@@ -43,10 +44,13 @@ logs:
 build-ingestion:
 	$(COMPOSE) build ingestion
 
-ingestion: start
+migrate-cnpj: start
+	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql'
+
+ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
 
-cnpj: start
+cnpj: migrate-cnpj
 	$(COMPOSE) run --rm ingestion python main.py cnpj
 
 test: ingestion

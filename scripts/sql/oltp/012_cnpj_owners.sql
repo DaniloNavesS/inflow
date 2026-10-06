@@ -67,14 +67,17 @@ CREATE TABLE IF NOT EXISTS oltp.socios (
 CREATE INDEX IF NOT EXISTS idx_socios_nome ON oltp.socios(nome_socio);
 CREATE INDEX IF NOT EXISTS idx_socios_documento ON oltp.socios(documento_socio);
 
+DROP TRIGGER IF EXISTS trg_qualificacoes_socio_atualizado_em ON oltp.qualificacoes_socio;
 CREATE TRIGGER trg_qualificacoes_socio_atualizado_em
     BEFORE UPDATE ON oltp.qualificacoes_socio
     FOR EACH ROW EXECUTE FUNCTION oltp.trigger_set_atualizado_em();
 
+DROP TRIGGER IF EXISTS trg_naturezas_juridicas_atualizado_em ON oltp.naturezas_juridicas;
 CREATE TRIGGER trg_naturezas_juridicas_atualizado_em
     BEFORE UPDATE ON oltp.naturezas_juridicas
     FOR EACH ROW EXECUTE FUNCTION oltp.trigger_set_atualizado_em();
 
+DROP TRIGGER IF EXISTS trg_empresas_atualizado_em ON oltp.empresas;
 CREATE TRIGGER trg_empresas_atualizado_em
     BEFORE UPDATE ON oltp.empresas
     FOR EACH ROW EXECUTE FUNCTION oltp.trigger_set_atualizado_em();
