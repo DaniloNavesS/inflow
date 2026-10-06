@@ -1,8 +1,28 @@
 COMPOSE=docker compose
 
-.PHONY: up down stop restart ps logs ingestion build-ingestion cnpj test docs docs-build db-shell clean
+.DEFAULT_GOAL := help
 
-up:
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj docs docs-build db-shell clean
+
+help:
+	@printf '%s\n' \
+		'Comandos disponíveis:' \
+		'  make start            Sobe o PostgreSQL em segundo plano' \
+		'  make down             Derruba os contêineres' \
+		'  make stop             Para os contêineres sem removê-los' \
+		'  make restart          Reinicia o PostgreSQL' \
+		'  make ps               Lista os contêineres' \
+		'  make logs             Acompanha os logs' \
+		'  make ingestion        Executa a ingestão' \
+		'  make test             Executa a ingestão e os testes' \
+		'  make build-ingestion  Reconstrói a imagem do ingestor' \
+		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
+		'  make docs             Serve a documentação' \
+		'  make docs-build       Constrói a imagem da documentação' \
+		'  make db-shell         Abre o psql' \
+		'  make clean            Derruba os contêineres e remove os volumes'
+
+start:
 	$(COMPOSE) up -d postgres
 
 down:
@@ -23,11 +43,10 @@ logs:
 build-ingestion:
 	$(COMPOSE) build ingestion
 
-ingestion: up
+ingestion: start
 	$(COMPOSE) run --rm ingestion
 
-
-cnpj: up
+cnpj: start
 	$(COMPOSE) run --rm ingestion python main.py cnpj
 
 test: ingestion

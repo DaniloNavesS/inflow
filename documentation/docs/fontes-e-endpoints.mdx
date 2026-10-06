@@ -5,24 +5,39 @@ title: Fontes e Endpoints
 
 # Fontes verificadas
 
-Todos os caminhos abaixo foram consultados no domínio oficial. A API administrativa usa a base
-`https://adm.senado.gov.br/adm-dadosabertos/api/v1`; a legislativa usa
-`https://legis.senado.leg.br/dadosabertos`.
+Todos os caminhos abaixo foram consultados no domínio oficial. A coluna **Fonte** identifica
+o sistema ou documento do qual o dado realmente se origina; o endpoint é apenas o meio técnico de
+acesso.
 
-| Fonte | Caminho verificado | Uso | Situação |
+A API administrativa usa a base `https://adm.senado.gov.br/adm-dadosabertos/api/v1`; a
+legislativa usa `https://legis.senado.leg.br/dadosabertos`.
+
+| Dado | Fonte | Caminho verificado | Uso |
 |---|---|---|---|
-| CEAPS | `/senadores/despesas_ceaps/{ano}` | despesas e fornecedores | carregado |
-| Senadores atuais | `/senador/lista/atual.json` | fotografia atual | carregado |
-| Senadores por legislatura | `/senador/lista/legislatura/{legislatura}.json` | cadastro histórico | carregado para a 57ª |
-| Mandatos e exercícios | `/senador/{codigo}/mandatos.json` | UF, mandato e intervalos de exercício | carregado |
-| Filiações | `/senador/{codigo}/filiacoes.json` | partido vigente no tempo | carregado |
-| Comissões | `/senador/{codigo}/comissoes.json` | vínculos em colegiados | carregado |
-| Cargos em comissões | `/senador/{codigo}/cargos.json` | presidência e outros cargos | verificado nos insumos; ingestão pendente |
-| Composição atual | `/composicao/comissao/{codigo}?ativas=S` | retrato de vagas | apoio, não ingerido |
-| Votações | `/votacao?dataInicio={AAAA-MM-DD}&dataFim={AAAA-MM-DD}` | voto nominal | ingestão pendente |
-| Tipos de comparecimento | `/plenario/lista/tiposComparecimento` | dicionário de ocorrência de voto | não é fonte de presença completa |
-| Recursos utilizados | `/senadores/{codigo}/recursos-utilizados?ano={ano}` | pessoal, benefícios e recursos anuais | carregamento existente |
-| DSF | `/diarios/BuscaPaginasDiario?codDiario=...&paginaInicial=...&paginaFinal=...` | comparecimento oficial | carregado para três sessões |
+| CEAPS | [Sistema Cotas — Catálogo de Dados Abertos](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=administrativo) | `/senadores/despesas_ceaps/{ano}` | despesas e fornecedores |
+| Senadores atuais | [Parlam — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/lista/atual.json` | fotografia atual |
+| Senadores por legislatura | [Parlam — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/lista/legislatura/{legislatura}.json` | cadastro histórico |
+| Mandatos e exercícios | [Parlam — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/{codigo}/mandatos.json` | UF, mandato e intervalos de exercício |
+| Filiações | [Parlam — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/{codigo}/filiacoes.json` | partido vigente no tempo |
+| Comissões | [Accor — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/{codigo}/comissoes.json` | vínculos em colegiados |
+| Cargos em comissões | [Accor — Catálogo Legislativo de Senadores](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=senadores&portal=Legislativo) | `/senador/{codigo}/cargos.json` | presidência e outros cargos |
+| Composição atual | [Accor — Catálogo de Composição](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=composicao&portal=Legislativo) | `/composicao/comissao/{codigo}?ativas=S` | retrato de vagas |
+| Votações nominais | [Parlam — Catálogo de Votações Nominais](https://www12.senado.leg.br/dados-abertos/legislativo/plenario/votacoes-nominais) | `/votacao?codigoParlamentar={codigo}`; por período: `/votacao?dataInicio={AAAA-MM-DD}&dataFim={AAAA-MM-DD}` | conteúdo do voto nominal (`Sim`, `Não`, `Abstenção` etc.) |
+| Tipos de comparecimento | [ePlenário — Catálogo de Plenário](https://www12.senado.leg.br/dados-abertos/conjuntos?grupo=plenario&portal=Legislativo) | `/plenario/lista/tiposComparecimento` | dicionário de ocorrências; não comprova presença na sessão |
+| Recursos utilizados | [Gestão de Pessoas — relatório oficial](https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/4694/recursos-utilizados?ano=2025&formato=html) | `/senadores/{codigo}/recursos-utilizados?ano={ano}` | pessoal, benefícios e recursos anuais |
+| Presença | [Diário do Senado Federal](https://www12.senado.leg.br/publicacoes/conteudo-home/publicacoes-oficiais/diario-do-senado-federal) e [tutorial oficial de verificação da assiduidade](https://www12.senado.leg.br/assessoria-de-imprensa/tutorial-de-verificacao-da-assiduidade-dos-senadores) | `/diarios/BuscaPaginasDiario?codDiario=...&paginaInicial=...&paginaFinal=...` | presença e indicação booleana de voto, extraídas do registro de comparecimento |
+
+## Presença
+
+A fonte de presença é o **Diário do Senado Federal**, seguindo o
+[tutorial oficial de verificação da assiduidade](https://www12.senado.leg.br/assessoria-de-imprensa/tutorial-de-verificacao-da-assiduidade-dos-senadores).
+O job atual lê a seção **Registro de Comparecimento** do DSF e só cria `PRESENTE` quando encontra a
+marca de comparecimento. Quando a mesma linha contém a segunda marca, o job também grava
+`voto_registrado = true`; esse campo indica apenas que houve voto, sem informar se foi `Sim`, `Não`
+ou `Abstenção`.
+
+Assim, ausência de voto não é tratada como ausência na sessão. O conteúdo do voto nominal pertence
+à fonte de votações e ainda depende de modelagem própria.
 
 O vínculo entre as fontes é o código do parlamentar. Não se usa partido/UF atual para fatos
 históricos: a consulta deve selecionar o mandato, exercício e filiação vigentes na data do evento.

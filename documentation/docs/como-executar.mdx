@@ -24,13 +24,13 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 
 | Etapa | Com Make | Só com Docker Compose |
 |---|---|---|
-| Subir o PostgreSQL e criar o esquema | `make up` | `docker compose up -d postgres` |
+| Subir o PostgreSQL e criar o esquema | `make start` | `docker compose up -d postgres` |
 | Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
 | Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
 | Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
 | Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
 
-`make ingestion` já executa `make up` antes, então para uma primeira execução basta:
+`make ingestion` já executa `make start` antes, então para uma primeira execução basta:
 
 ```bash
 make ingestion
@@ -46,10 +46,12 @@ O banco fica acessível em `localhost:5433`.
 3. O contêiner `ingestion` roda `python main.py`, que executa os jobs em sequência (senadores,
    comissões, presença DSF, CEAPS e gabinete), registrando cada execução em `monitoring`.
 
-:::warning Os scripts de esquema só rodam com volume vazio
+:::warning[Os scripts de esquema só rodam com volume vazio]
+
 O PostgreSQL executa `docker-entrypoint-initdb.d` apenas na criação do volume. Se você já tinha
 subido uma versão anterior do projeto, rode `make clean` (ou `docker compose down -v`) antes, senão
 o esquema antigo continua valendo.
+
 :::
 
 ## Conferir a carga

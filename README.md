@@ -1,4 +1,4 @@
-# InFlow
+# Mandato Aberto
 
 Fonte transacional de dados públicos do Senado Federal para analisar CEAPS, fornecedores,
 histórico parlamentar, comissões, presença plenária e estrutura de gabinete.
@@ -26,7 +26,7 @@ make test
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
 modelagem, limitações e decisões arquiteturais estão na
 [documentação completa](https://danilonavess.github.io/inflow/docs/intro).
-O **InFlow** é um projeto acadêmico de Engenharia de Dados voltado para coleta, processamento e análise de dados públicos do Senado Federal.
+O **Mandato Aberto** é um projeto acadêmico de Engenharia de Dados voltado para coleta, processamento e análise de dados públicos do Senado Federal.
 
 
 ## Como executar

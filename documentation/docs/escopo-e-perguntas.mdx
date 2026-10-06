@@ -5,35 +5,24 @@ title: Escopo e perguntas
 
 # Perguntas de gestão da E1
 
-Os insumos do grupo haviam retirado as perguntas 5, 6 e 10 porque votação não comprova
-assiduidade. A prova com o DSF tornou a obtenção de presença viável; por isso elas voltam ao
-escopo com cobertura inicial limitada a três sessões. A pergunta 7 permanece válida: ela trata
-de comissões, não de presença.
+| Nº | Pergunta | Dados necessários |
+|---|---|---|
+| 1 | Qual é a despesa média mensal de CEAPS de cada senador? | senador, valor da despesa, mês e exercício |
+| 2 | Quais senadores apresentam despesas mensais de CEAPS classificadas como atípicas em relação aos demais senadores do mesmo partido | senador, valor da despesa, partido vigente, mês e exercício |
+| 3 | Quais categorias de despesa mais contribuem para os valores mensais de CEAPS classificados como atípicos. | senador, categoria da despesa, valor, mês, exercício e resultado da identificação de valores atípicos |
+| 4 | Qual é a despesa média mensal de CEAPS por partido? | valor da despesa, partido vigente, mês e exercício |
+| 5 | Qual é a taxa de comparecimento de cada senador às sessões deliberativas? | senador, sessões deliberativas e registros de presença |
+| 6 | Qual é a taxa média de comparecimento às sessões deliberativas por partido? | presença, senador, partido vigente e sessões deliberativas |
+| 7 | Quantas comissões cada senador integra? | senador, comissão e período do vínculo |
+| 8 | Quantas vagas em comissões são ocupadas por cada partido? | comissão, senador, partido vigente, tipo da vaga e período do vínculo |
+| 9 | Quantos votos nominais abertos cada senador registrou no período analisado? | senador, votação, voto nominal e exercício |
+| 10 | Qual é a despesa média mensal de CEAPS por UF? | valor da despesa, UF do senador, mês e exercício |
+| 11 | Qual categoria de despesa representa a maior parcela da CEAPS de cada senador? | senador, categoria, valor da despesa e total da CEAPS no período |
+| 12 | Qual é o quantitativo de pessoal associado a cada senador? | senador, registros de pessoal e período |
 
-Legenda: ✅ fluxo mínimo carregado; ⚠️ dados/modelo disponíveis, consulta analítica ainda será
-materializada na E3; ❌ fonte ou ingestão ainda ausente.
 
-| Pergunta | Dados necessários | Fonte | Endpoint/documento | Tabelas | Implementado? | Limitações |
-|---|---|---|---|---|---|---|
-| 1. Qual é a despesa CEAPS média mensal por senador? | despesa, mês, exercício | API administrativa e legislativa | `despesas_ceaps/{ano}`; `mandatos` | `despesas`, `senadores`, `exercicios_mandato` | ⚠️ | A média e a distinção entre zero e mês sem cobertura ficam para a camada analítica. |
-| 2. Quais senadores têm despesas mensais atípicas frente ao mesmo partido ou UF? | despesa, partido/UF vigente, exercício | APIs administrativa e legislativa | CEAPS; `filiacoes`; `mandatos` | `despesas`, `filiacoes_partidarias`, `mandatos` | ⚠️ | Método estatístico ainda não definido; grupos pequenos exigem leitura descritiva. |
-| 3. Quais categorias explicam os desvios mensais? | categoria e resultado da pergunta 2 | API administrativa | CEAPS | `despesas` | ⚠️ | Contribuição monetária não explica causalidade. |
-| 4. Qual partido tem maior despesa média CEAPS por senador/mês? | despesa, filiação e exercício vigentes | APIs administrativa e legislativa | CEAPS; `filiacoes`; `mandatos` | `despesas`, `filiacoes_partidarias`, `exercicios_mandato` | ⚠️ | É preciso definir a atribuição quando há troca partidária no mês. |
-| 5. Qual é a taxa de comparecimento dos senadores às sessões deliberativas? | sessões deliberativas e listas de presença | DSF | seção “Registro de Comparecimento” | `sessao_plenaria`, `documento_dsf`, `registro_presenca` | ✅ mínimo | Três sessões de outubro/2023; não há inferência de ausência. |
-| 6. Como o comparecimento varia entre partidos e UFs? | presença e partido/UF na data | DSF e API legislativa | DSF; `filiacoes`; `mandatos` | `registro_presenca`, `filiacoes_partidarias`, `mandatos` | ⚠️ | Amostra inicial não sustenta comparação geral; precisa ampliar o período. |
-| 7. Quais senadores integram mais comissões e quais cargos exercem? | vínculos e cargos por período | API legislativa | `senador/{codigo}/comissoes`; `senador/{codigo}/cargos` | `comissoes`, `participacoes_comissao` | ⚠️ | Vínculos são carregados; endpoint de cargos ainda não é ingerido separadamente. |
-| 8. Quais partidos ocupam mais vagas em comissões? | vínculos, tipo da vaga e partido vigente | API legislativa | `comissoes`; `filiacoes` | `participacoes_comissao`, `filiacoes_partidarias` | ⚠️ | Requer data de referência e separação de titular/suplente. |
-| 9. Quais senadores registram mais votos nominais abertos? | votações, votos e exercício | API legislativa | `votacao?dataInicio=...&dataFim=...`; `tiposComparecimento` | ainda sem tabela de votação | ❌ | Presença DSF não substitui voto; ingestão de votações foi retirada do fluxo de presença. |
-| 10. Há associação entre comparecimento e CEAPS? | presença, exercício e despesa mensal | DSF e APIs | DSF; CEAPS; `mandatos` | `registro_presenca`, `despesas`, `exercicios_mandato` | ⚠️ | Três sessões são insuficientes para inferência; associação não implica causalidade. |
-| 11. Há associação entre comissões e CEAPS? | vínculos mensais e despesa | APIs administrativa e legislativa | CEAPS; `comissoes` | `participacoes_comissao`, `despesas` | ⚠️ | Consulta analítica ainda não materializada. |
-| 12. Como variam média e composição da CEAPS entre UFs? | despesa, UF e exercício vigentes | APIs administrativa e legislativa | CEAPS; `mandatos` | `despesas`, `mandatos`, `exercicios_mandato` | ⚠️ | Comparar o mesmo período e ponderar meses elegíveis. |
-| 13. Quais categorias têm maior parcela da CEAPS de cada senador? | categoria, valor e total no período | API administrativa | CEAPS | `despesas` | ⚠️ | Percentual não se aplica quando o total é zero. |
-| 14. Quem tem maior quantitativo de pessoal e como isso se relaciona aos valores publicados? | pessoal, benefícios e recursos anuais | API administrativa | `recursos-utilizados?ano={ano}` | `estrutura_gabinete` | ⚠️ | Quantitativo não é folha nem garante simultaneidade; parser precisa ser monitorado. |
-| Perfil. Como os senadores atuais se distribuem por partido e UF? | cadastro atual | API legislativa | `senador/lista/atual` | `senadores` | ✅ | Fotografia da data da coleta. |
-| Fornecedores. Quem recebeu mais e de quais senadores? | fornecedor, despesa e senador | API administrativa | CEAPS | `fornecedores`, `despesas`, `senadores` | ✅ | Documento ausente não permite deduplicação forte. |
+> Neste projeto, serão considerados atípicos os valores de despesa que apresentarem afastamento elevado em relação à mediana do grupo analisado. Para essa identificação será utilizado o **Median Absolute Deviation (MAD)**, uma medida robusta de dispersão calculada por:
 
-## Perguntas retiradas
+> Fórmula: **MAD = mediana(|xᵢ − mediana(x)|)**
 
-Nenhuma pergunta de presença foi retirada após a prova de viabilidade. A antiga formulação
-“participação” foi desmembrada: comparecimento vem do DSF, voto vem da API de votações e vínculo
-em comissão vem da API de comissões. A pergunta 9 segue válida, porém não está implementada na E1.
+> Como a mediana e o MAD são pouco influenciados por valores extremos, o método é adequado para identificar despesas excepcionalmente altas ou baixas sem que esses próprios valores distorçam o parâmetro de comparação.
