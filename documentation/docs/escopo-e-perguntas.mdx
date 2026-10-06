@@ -8,8 +8,8 @@ title: Escopo e perguntas
 | Nº | Pergunta | Dados necessários |
 |---|---|---|
 | 1 | Qual é a despesa média mensal de CEAPS de cada senador? | senador, valor da despesa, mês e exercício |
-| 2 | Quais senadores apresentam despesas mensais de CEAPS classificadas como atípicas em relação aos demais senadores do mesmo partido | senador, valor da despesa, partido vigente, mês e exercício |
-| 3 | Quais categorias de despesa mais contribuem para os valores mensais de CEAPS classificados como atípicos. | senador, categoria da despesa, valor, mês, exercício e resultado da identificação de valores atípicos |
+| 2 | Quais despesas mensais de CEAPS dos senadores foram classificadas como atípicas em relação aos demais? Avaliado por uma LLM | senador, valor da despesa, partido vigente, mês e exercício |
+| 3 | Quais categorias de despesa mais contribuem para os valores atípicos mensais de CEAPS? | senador, categoria da despesa, valor, mês, exercício e resultado da identificação de valores atípicos |
 | 4 | Qual é a despesa média mensal de CEAPS por partido? | valor da despesa, partido vigente, mês e exercício |
 | 5 | Qual é a taxa de comparecimento de cada senador às sessões deliberativas? | senador, sessões deliberativas e registros de presença |
 | 6 | Qual é a taxa média de comparecimento às sessões deliberativas por partido? | presença, senador, partido vigente e sessões deliberativas |
@@ -19,10 +19,4 @@ title: Escopo e perguntas
 | 10 | Qual é a despesa média mensal de CEAPS por UF? | valor da despesa, UF do senador, mês e exercício |
 | 11 | Qual categoria de despesa representa a maior parcela da CEAPS de cada senador? | senador, categoria, valor da despesa e total da CEAPS no período |
 | 12 | Qual é o quantitativo de pessoal associado a cada senador? | senador, registros de pessoal e período |
-
-
-> Neste projeto, serão considerados atípicos os valores de despesa que apresentarem afastamento elevado em relação à mediana do grupo analisado. Para essa identificação será utilizado o **Median Absolute Deviation (MAD)**, uma medida robusta de dispersão calculada por:
-
-> Fórmula: **MAD = mediana(|xᵢ − mediana(x)|)**
-
-> Como a mediana e o MAD são pouco influenciados por valores extremos, o método é adequado para identificar despesas excepcionalmente altas ou baixas sem que esses próprios valores distorçam o parâmetro de comparação.
+| 13 | Quais são os donos de empresa que tiveram mais subsídio do CEAPS pelos senadores? | senador, registros de pessoal e período |

@@ -13,6 +13,8 @@ dado operacional e metadados de execução.
 
 ![Diagrama da arquitetura do Mandato Aberto, com fontes, ingestão, monitoramento e camadas Bronze, Silver e Gold](./img/arquitetura_inflow.jpg)
 
+O diagrama resume o fluxo original; o enriquecimento CNPJ está descrito na seção de jobs abaixo.
+
 Na figura, **Gold** representa a camada de consumo analítico. Ela organiza dados tratados em
 indicadores, métricas e visões de negócio que apoiam as perguntas de gestão. Essa etapa ainda não
 está implementada na E1, que entrega Bronze e OLTP.
@@ -45,6 +47,12 @@ antes das participações em comissões, das despesas, da presença e da estrutu
 | 3 | `dsf_attendance` | páginas do Diário do Senado Federal | sessões, documentos de evidência e registros de presença |
 | 4 | `expenses` | CEAPS do ano configurado | fornecedores e despesas |
 | 5 | `staff` | recursos utilizados por senador e ano | quantitativos e benefícios da estrutura de gabinete |
+| 6 | `cnpj_owners` (opcional) | dados abertos do CNPJ da Receita Federal | empresas e sócios dos fornecedores e da cadeia societária |
+
+Após a carga CEAPS, o enriquecimento CNPJ consulta os sócios das empresas fornecedoras e percorre
+empresas sócias até encontrar pessoas físicas ou interromper a cadeia. A view
+`oltp.vw_donos_finais` associa cada caminho ao `fornecedor_id` original; as despesas continuam
+ligadas ao fornecedor, sem gravar um dono final em cada lançamento.
 
 O orquestrador ainda contém o job legado `sessions`, baseado em ocorrências de votação. Ele não é
 fonte válida para medir assiduidade e não integra o contrato-alvo de presença. A fonte oficial para
@@ -70,7 +78,7 @@ de objetos, formato colunar, política de retenção ou catálogo externo.
 
 ### OLTP
 
-O schema `oltp` mantém a visão operacional normalizada. As tabelas se agrupam em cinco domínios:
+O schema `oltp` mantém a visão operacional normalizada. As tabelas se agrupam em seis domínios:
 
 | Domínio | Entidades principais |
 |---|---|
@@ -78,6 +86,7 @@ O schema `oltp` mantém a visão operacional normalizada. As tabelas se agrupam 
 | Comissões | `comissoes`, `participacoes_comissao` |
 | Presença | `sessao_plenaria`, `documento_dsf`, `registro_presenca`, `licenca_justificativa` |
 | CEAPS | `fornecedores`, `despesas` |
+| Quadro societário CNPJ | `empresas`, `socios`, `qualificacoes_socio`, `naturezas_juridicas`; view `vw_donos_finais` |
 | Gabinete | `estrutura_gabinete` |
 
 Chaves primárias e estrangeiras protegem os relacionamentos; restrições `CHECK` barram valores fora

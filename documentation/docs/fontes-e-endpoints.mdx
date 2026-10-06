@@ -44,11 +44,16 @@ históricos: a consulta deve selecionar o mandato, exercício e filiação vigen
 
 ## Fornecedores
 
-- CNPJ ou CPF completo: identidade pelo documento somente.
-- CPF mascarado: chave fraca formada por documento mascarado e nome normalizado.
-- Documento ausente: chave por nome normalizado e identificador da despesa; dois lançamentos não
-  são fundidos automaticamente.
-- Grafias repetidas com documento completo: o documento prevalece e o nome pode ser atualizado.
+O enriquecimento opcional usa os dados abertos do CNPJ da Receita Federal para carregar empresas e
+seus sócios por retrato mensal. Para um fornecedor com CNPJ completo, a view
+`oltp.vw_donos_finais` segue os sócios que participam do capital, inclusive quando o sócio é outra
+empresa, e devolve o caminho até uma pessoa física, estrangeiro ou ponto sem dados. Uma despesa se
+relaciona ao resultado pelo `fornecedor_id`; o QSA não informa percentuais de participação, portanto
+o valor da despesa não pode ser rateado entre os donos.
 
-Essa escolha evita a entidade genérica `SEM_DOCUMENTO`. Ela pode manter duplicatas quando a fonte
-omite o identificador; é uma perda deliberada para não unir pessoas ou empresas distintas.
+- A carga CEAPS identifica `fornecedores` pelo valor de `cnpj_cpf` recebido e atualiza a razão social
+  em reprocessamentos do mesmo documento.
+- Documento ausente recebe o identificador `SEM_DOCUMENTO`; lançamentos sem documento podem, portanto,
+  compartilhar o mesmo fornecedor.
+- O enriquecimento societário considera apenas fornecedores com CNPJ completo de 14 dígitos e sem
+  máscara. CPF e documento incompleto não têm cadeia de QSA nessa view.
