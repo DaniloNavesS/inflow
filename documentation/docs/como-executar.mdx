@@ -25,32 +25,41 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Etapa | Com Make | Só com Docker Compose |
 |---|---|---|
 | Subir o PostgreSQL e criar o esquema | `make start` | `docker compose up -d postgres` |
+| Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres psql -U inflow_user -d inflow_db --single-transaction -v ON_ERROR_STOP=1 -f /migrations/012_cnpj_owners.sql` |
+| Executar a carga isolada CNPJ | `make cnpj` | `docker compose run --rm ingestion python main.py cnpj` |
 | Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
 | Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
 | Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
 | Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
 
-`make ingestion` já executa `make start` antes, então para uma primeira execução basta:
+`make ingestion` inicia e aguarda o PostgreSQL, aplica a migração CNPJ e executa a carga completa. Para carregar apenas empresas e sócios, use `make cnpj`.
 
 ```bash
 make ingestion
 ```
 O banco fica acessível em `localhost:5433`.
 
+## Validar a carga CNPJ sem baixar a base nacional
+
+A suíte dedicada sobe PostgreSQL 15 em armazenamento temporário e substitui apenas a listagem e o download por ZIPs sintéticos Latin-1. Ela não executa a ingestão completa nem acessa os arquivos nacionais da Receita.
+
+```bash
+docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml run --rm --build integration pytest -q -p no:cacheprovider /tests/test_cnpj_integration.py
+docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml down
+```
+
 ## O que acontece na primeira subida
 
 1. O contêiner `postgres` encontra o volume `inflow_postgres_data` vazio e executa, **em ordem
    alfabética**, os scripts montados em `/docker-entrypoint-initdb.d`: `scripts/sql/oltp/001` a
-   `011`, depois o schema `monitoring` e o schema `bronze`.
+   `012`, depois os scripts dos schemas `monitoring` e `bronze`.
 2. O `healthcheck` confirma que o banco aceita conexões.
 3. O contêiner `ingestion` roda `python main.py`, que executa os jobs em sequência (senadores,
    comissões, presença DSF, CEAPS e gabinete), registrando cada execução em `monitoring`.
 
-:::warning[Os scripts de esquema só rodam com volume vazio]
+:::info[Atualizar um banco existente]
 
-O PostgreSQL executa `docker-entrypoint-initdb.d` apenas na criação do volume. Se você já tinha
-subido uma versão anterior do projeto, rode `make clean` (ou `docker compose down -v`) antes, senão
-o esquema antigo continua valendo.
+Os scripts de `docker-entrypoint-initdb.d` só rodam quando o volume está vazio. Para aplicar o esquema da Receita em um banco existente, use `make migrate-cnpj`. Esse comando executa `012_cnpj_owners.sql` em uma única transação. `make ingestion` e `make cnpj` aplicam a migração automaticamente antes da carga; não é necessário apagar o volume.
 
 :::
 
