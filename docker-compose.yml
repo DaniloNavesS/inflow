@@ -11,6 +11,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ./scripts/sql/oltp/012_cnpj_owners.sql:/migrations/012_cnpj_owners.sql:roZ
+      - ./scripts/sql/oltp/013_donos_finais.sql:/migrations/013_donos_finais.sql:roZ
       - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
       - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:
@@ -33,6 +35,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./tests:/tests:ro
+      - cnpj_cache:/cache/cnpj
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -42,6 +45,11 @@ services:
       INGESTION_YEAR: ${INGESTION_YEAR:-2024}
       LIMIT_SENADORES: ${LIMIT_SENADORES:-0}
       LEGISLATURE: ${LEGISLATURE:-57}
+      ENABLE_CNPJ_OWNERS: ${ENABLE_CNPJ_OWNERS:-1}
+      RFB_CNPJ_TOKEN: ${RFB_CNPJ_TOKEN:-gn672Ad4CF8N6TK}
+      RFB_CNPJ_MONTH: ${RFB_CNPJ_MONTH:-}
+      CNPJ_OWNER_MAX_DEPTH: ${CNPJ_OWNER_MAX_DEPTH:-5}
+      CNPJ_CACHE_DIR: /cache/cnpj
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,6 +69,8 @@ services:
 volumes:
   postgres_data:
     name: inflow_postgres_data
+  cnpj_cache:
+    name: inflow_cnpj_cache
 
 networks:
   inflow_network:

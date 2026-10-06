@@ -30,8 +30,9 @@ def save_raw_payload(
     media_type: str,
     http_status: int | None = None,
     ingestion_year: int | None = None,
+    commit: bool = True,
 ) -> str:
-    """Preserva uma versão única do conteúdo original antes da transformação."""
+    """Preserva o conteúdo bruto; confirma por padrão para manter os jobs atuais."""
     if (payload_json is None) == (payload_bytes is None):
         raise ValueError("Informe exatamente um entre payload_json e payload_bytes")
 
@@ -69,6 +70,7 @@ def save_raw_payload(
             ),
         )
         raw_id = cursor.fetchone()[0]
-    connection.commit()
+    if commit:
+        connection.commit()
     logger.debug("Payload bruto preservado: tipo=%s id=%s sha256=%s", entity_type, raw_id, content_hash[:12])
     return content_hash
