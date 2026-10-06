@@ -46,6 +46,7 @@ services:
       ENABLE_CNPJ_OWNERS: ${ENABLE_CNPJ_OWNERS:-1}
       RFB_CNPJ_TOKEN: ${RFB_CNPJ_TOKEN:-gn672Ad4CF8N6TK}
       RFB_CNPJ_MONTH: ${RFB_CNPJ_MONTH:-}
+      CNPJ_OWNER_MAX_DEPTH: ${CNPJ_OWNER_MAX_DEPTH:-5}
       CNPJ_CACHE_DIR: /cache/cnpj
     depends_on:
       postgres:

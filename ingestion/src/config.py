@@ -18,6 +18,7 @@ RFB_CNPJ_BASE_URL = os.getenv(
 RFB_CNPJ_TOKEN = os.getenv("RFB_CNPJ_TOKEN", "gn672Ad4CF8N6TK")  
 RFB_CNPJ_MONTH = os.getenv("RFB_CNPJ_MONTH", "")  
 CNPJ_CACHE_DIR = os.getenv("CNPJ_CACHE_DIR", "/cache/cnpj")
+CNPJ_OWNER_MAX_DEPTH = int(os.getenv("CNPJ_OWNER_MAX_DEPTH", "5"))
 
 REQUEST_HEADERS = {
     "Accept": "application/json",

@@ -109,13 +109,17 @@ def loaded(db):
     return db
 
 
-def test_every_company_is_a_ceaps_supplier(loaded):
+def test_every_company_is_a_supplier_or_a_partner_in_its_chain(loaded):
     assert scalar(loaded, """
         SELECT count(*) FROM empresas e
         WHERE NOT EXISTS (
             SELECT 1 FROM fornecedores f
             WHERE f.cnpj_cpf NOT LIKE '%*%'
               AND left(regexp_replace(f.cnpj_cpf, '[^0-9]', '', 'g'), 8) = e.cnpj_basico
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM socios s
+            WHERE s.tipo_socio = 1 AND s.documento_socio = e.cnpj_basico
         )
     """) == 0
 

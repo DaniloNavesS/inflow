@@ -23,7 +23,13 @@ from psycopg2.extras import execute_values
 
 from bronze.raw import save_raw_payload
 from clients.rfb import download_file, get_rfb_session, list_folder, list_months
-from config import CNPJ_CACHE_DIR, RFB_CNPJ_BASE_URL, RFB_CNPJ_MONTH, RFB_CNPJ_TOKEN
+from config import (
+    CNPJ_CACHE_DIR,
+    CNPJ_OWNER_MAX_DEPTH,
+    RFB_CNPJ_BASE_URL,
+    RFB_CNPJ_MONTH,
+    RFB_CNPJ_TOKEN,
+)
 
 logger = logging.getLogger("inflow_ingestor")
 
@@ -135,6 +141,35 @@ def iter_zip_rows(path: Path):
             yield from csv.reader(io.TextIOWrapper(raw, encoding="latin-1", newline=""), delimiter=";")
 
 
+def scan_file(path: Path, keys: set[str]) -> tuple[list[list[str]], int]:
+    """Linhas do ZIP cuja raiz de CNPJ está em keys, e o total de linhas varridas.
+
+    Toda linha começa com "NNNNNNNN" (a raiz entre aspas). Comparar esse trecho antes do
+    parse CSV evita interpretar dezenas de milhões de linhas que serão descartadas.
+    """
+    rows, lines = [], 0
+    if not keys:
+        return rows, lines
+    with zipfile.ZipFile(path) as archive:
+        with archive.open(archive.namelist()[0]) as raw:
+            for line in io.TextIOWrapper(raw, encoding="latin-1", newline=""):
+                lines += 1
+                if line[1:9] in keys:
+                    rows.append(next(csv.reader([line], delimiter=";")))
+    return rows, lines
+
+
+def partner_companies(socio_records) -> set[str]:
+    """Raízes de CNPJ das empresas que são sócias (tipo 1) nos registros dados.
+
+    A RFB publica o documento do sócio PJ apenas com os 8 dígitos da raiz.
+    """
+    return {
+        record[4] for record in socio_records
+        if record[2] == 1 and record[4] and re.fullmatch(r"\d{8}", record[4])
+    }
+
+
 # ------------------------------------------------------------------------------
 # Fonte
 # ------------------------------------------------------------------------------
@@ -220,29 +255,58 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
     upsert_lookup(conn, "qualificacoes_socio", qualificacoes)
     upsert_lookup(conn, "naturezas_juridicas", naturezas)
 
-    # Varredura filtrada dos 20 arquivos grandes
     read = rejected = 0
     raw_rows = {group: [] for group in GROUPS}
-    empresas, socios = {}, {}
-    for group in GROUPS:
-        for part in PARTS:
-            path = fetch(f"{group}{part}.zip")
-            for row in iter_zip_rows(path):
-                read += 1
-                if not row or row[0] not in targets:
-                    continue
-                raw_rows[group].append(row)
-                if group == "Empresas":
-                    record = parse_empresa(row, reference)
-                    if record:
-                        empresas[record[0]] = record
-                else:
-                    record = parse_socio(row, reference)
-                    if record:
-                        socios[(record[0], record[2], record[3], record[4], record[5])] = record
+
+    # Sócios, subindo a cadeia societária: o nível 0 são os fornecedores; cada nível
+    # seguinte são as empresas que aparecem como sócias (PJ) no nível anterior.
+    socios = {}
+    known = set(targets)
+    frontier = set(targets)
+    socio_files = [fetch(f"Socios{part}.zip") for part in PARTS]
+    for level in range(CNPJ_OWNER_MAX_DEPTH + 1):
+        level_records = []
+        for path in socio_files:
+            rows, lines = scan_file(path, frontier)
+            read += lines
+            for row in rows:
+                raw_rows["Socios"].append(row)
+                record = parse_socio(row, reference)
                 if record is None:
                     rejected += 1
-            logger.info("RFB: %s lido (%d linhas varridas até aqui).", path.name, read)
+                    continue
+                socios[(record[0], record[2], record[3], record[4], record[5])] = record
+                level_records.append(record)
+        frontier = partner_companies(level_records) - known
+        logger.info(
+            "RFB: nível %d da cadeia societária: %d sócios lidos; %d empresas sócias novas.",
+            level, len(level_records), len(frontier),
+        )
+        if not frontier:
+            break
+        if level == CNPJ_OWNER_MAX_DEPTH:
+            # Sem o quadro de sócios, essas empresas aparecem como cadeia interrompida.
+            logger.warning(
+                "RFB: profundidade máxima (%d) atingida; %d empresas sócias não foram expandidas.",
+                CNPJ_OWNER_MAX_DEPTH, len(frontier),
+            )
+            break
+        known |= frontier
+
+    # Dados cadastrais de todas as empresas da cadeia, em uma única varredura.
+    empresas = {}
+    for part in PARTS:
+        path = fetch(f"Empresas{part}.zip")
+        rows, lines = scan_file(path, known)
+        read += lines
+        for row in rows:
+            raw_rows["Empresas"].append(row)
+            record = parse_empresa(row, reference)
+            if record is None:
+                rejected += 1
+                continue
+            empresas[record[0]] = record
+        logger.info("RFB: %s lido (%d linhas varridas até aqui).", path.name, read)
 
     for group, rows in raw_rows.items():
         save_raw_payload(
@@ -319,10 +383,10 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
 
     not_found = len(targets - set(empresas))
     logger.info(
-        "RFB: %d empresas e %d sócios carregados para %s em %.0f s; "
+        "RFB: %d empresas (%d fornecedores e %d sócias na cadeia) e %d sócios carregados para %s em %.0f s; "
         "%d raízes de CNPJ não encontradas na base; %d linhas rejeitadas no layout; %d sócios sem empresa.",
-        len(empresas), len(socios), month, time.perf_counter() - started,
-        not_found, rejected, len(orphan),
+        len(empresas), len(targets & set(empresas)), len(set(empresas) - targets), len(socios),
+        month, time.perf_counter() - started, not_found, rejected, len(orphan),
     )
     return {
         "records_read": read,
