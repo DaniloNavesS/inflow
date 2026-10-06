@@ -25,7 +25,7 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Etapa | Com Make | Só com Docker Compose |
 |---|---|---|
 | Subir o PostgreSQL e criar o esquema | `make start` | `docker compose up -d postgres` |
-| Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres psql -U inflow_user -d inflow_db --single-transaction -v ON_ERROR_STOP=1 -f /migrations/012_cnpj_owners.sql` |
+| Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql -f /migrations/013_donos_finais.sql'` |
 | Executar a carga isolada CNPJ | `make cnpj` | `docker compose run --rm ingestion python main.py cnpj` |
 | Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
 | Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
@@ -59,7 +59,7 @@ docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml down
 
 :::info[Atualizar um banco existente]
 
-Os scripts de `docker-entrypoint-initdb.d` só rodam quando o volume está vazio. Para aplicar o esquema da Receita em um banco existente, use `make migrate-cnpj`. Esse comando executa `012_cnpj_owners.sql` em uma única transação. `make ingestion` e `make cnpj` aplicam a migração automaticamente antes da carga; não é necessário apagar o volume.
+Os scripts de `docker-entrypoint-initdb.d` só rodam quando o volume está vazio. Para aplicar o esquema da Receita em um banco existente, use `make migrate-cnpj`. Esse comando executa `012_cnpj_owners.sql` e `013_donos_finais.sql` na mesma transação. `make ingestion` e `make cnpj` aplicam a migração automaticamente antes da carga; não é necessário apagar o volume.
 
 :::
 

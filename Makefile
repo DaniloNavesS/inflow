@@ -45,7 +45,7 @@ build-ingestion:
 	$(COMPOSE) build ingestion
 
 migrate-cnpj: start
-	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql'
+	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql -f /migrations/013_donos_finais.sql'
 
 ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
