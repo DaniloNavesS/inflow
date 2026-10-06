@@ -249,11 +249,9 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
     def fetch(name: str) -> Path:
         return download_file(session, f"{base_url}/{month}/{name}", cache / name, files.get(name))
 
-    # Tabelas de domínio
+    # Dicionários e arquivos são lidos antes de iniciar as escritas.
     qualificacoes = read_lookup(fetch("Qualificacoes.zip"))
     naturezas = read_lookup(fetch("Naturezas.zip"))
-    upsert_lookup(conn, "qualificacoes_socio", qualificacoes)
-    upsert_lookup(conn, "naturezas_juridicas", naturezas)
 
     read = rejected = 0
     raw_rows = {group: [] for group in GROUPS}
@@ -308,73 +306,81 @@ def ingest_cnpj_owners(conn: psycopg2.extensions.connection, run_id) -> dict:
             empresas[record[0]] = record
         logger.info("RFB: %s lido (%d linhas varridas até aqui).", path.name, read)
 
-    for group, rows in raw_rows.items():
-        save_raw_payload(
-            conn,
-            entity_type=f"rfb_{group.lower()}",
-            source_name="rfb_dados_abertos_cnpj",
-            source_url=f"{base_url}/{month}/{group}*.zip",
-            payload_json={"mes_referencia": month, "linhas": rows},
-            media_type="application/json",
-            run_id=run_id,
-        )
-
     # Sócio só entra se a empresa do mesmo retrato existe (FK composta).
     orphan = [key for key, record in socios.items() if record[0] not in empresas]
     for key in orphan:
         del socios[key]
 
-    ensure_codes(
-        conn, "naturezas_juridicas", {code for code, _ in naturezas},
-        {r[3] for r in empresas.values() if r[3] is not None},
-    )
-    ensure_codes(
-        conn, "qualificacoes_socio", {code for code, _ in qualificacoes},
-        {r[4] for r in empresas.values() if r[4] is not None}
-        | {r[5] for r in socios.values()}
-        | {r[10] for r in socios.values() if r[10] is not None},
-    )
+    try:
+        upsert_lookup(conn, "qualificacoes_socio", qualificacoes)
+        upsert_lookup(conn, "naturezas_juridicas", naturezas)
 
-    with conn.cursor() as cur:
-        execute_values(
-            cur,
-            """
-            INSERT INTO oltp.empresas (
-                cnpj_basico, data_referencia, razao_social, natureza_juridica,
-                qualificacao_responsavel, capital_social, porte, ente_federativo
-            ) VALUES %s
-            ON CONFLICT (cnpj_basico, data_referencia) DO UPDATE SET
-                razao_social = EXCLUDED.razao_social,
-                natureza_juridica = EXCLUDED.natureza_juridica,
-                qualificacao_responsavel = EXCLUDED.qualificacao_responsavel,
-                capital_social = EXCLUDED.capital_social,
-                porte = EXCLUDED.porte,
-                ente_federativo = EXCLUDED.ente_federativo
-            WHERE (oltp.empresas.razao_social, oltp.empresas.natureza_juridica,
-                   oltp.empresas.qualificacao_responsavel, oltp.empresas.capital_social,
-                   oltp.empresas.porte, oltp.empresas.ente_federativo)
-                IS DISTINCT FROM
-                  (EXCLUDED.razao_social, EXCLUDED.natureza_juridica,
-                   EXCLUDED.qualificacao_responsavel, EXCLUDED.capital_social,
-                   EXCLUDED.porte, EXCLUDED.ente_federativo);
-            """,
-            list(empresas.values()),
-            page_size=1000,
+        for group, rows in raw_rows.items():
+            save_raw_payload(
+                conn,
+                entity_type=f"rfb_{group.lower()}",
+                source_name="rfb_dados_abertos_cnpj",
+                source_url=f"{base_url}/{month}/{group}*.zip",
+                payload_json={"mes_referencia": month, "linhas": rows},
+                media_type="application/json",
+                run_id=run_id,
+                commit=False,
+            )
+
+        ensure_codes(
+            conn, "naturezas_juridicas", {code for code, _ in naturezas},
+            {r[3] for r in empresas.values() if r[3] is not None},
         )
-        execute_values(
-            cur,
-            """
-            INSERT INTO oltp.socios (
-                cnpj_basico, data_referencia, tipo_socio, nome_socio, documento_socio,
-                qualificacao, data_entrada, pais, documento_representante,
-                nome_representante, qualificacao_representante, faixa_etaria
-            ) VALUES %s
-            ON CONFLICT ON CONSTRAINT unq_socios_retrato DO NOTHING;
-            """,
-            list(socios.values()),
-            page_size=1000,
+        ensure_codes(
+            conn, "qualificacoes_socio", {code for code, _ in qualificacoes},
+            {r[4] for r in empresas.values() if r[4] is not None}
+            | {r[5] for r in socios.values()}
+            | {r[10] for r in socios.values() if r[10] is not None},
         )
-    conn.commit()
+
+        with conn.cursor() as cur:
+            execute_values(
+                cur,
+                """
+                INSERT INTO oltp.empresas (
+                    cnpj_basico, data_referencia, razao_social, natureza_juridica,
+                    qualificacao_responsavel, capital_social, porte, ente_federativo
+                ) VALUES %s
+                ON CONFLICT (cnpj_basico, data_referencia) DO UPDATE SET
+                    razao_social = EXCLUDED.razao_social,
+                    natureza_juridica = EXCLUDED.natureza_juridica,
+                    qualificacao_responsavel = EXCLUDED.qualificacao_responsavel,
+                    capital_social = EXCLUDED.capital_social,
+                    porte = EXCLUDED.porte,
+                    ente_federativo = EXCLUDED.ente_federativo
+                WHERE (oltp.empresas.razao_social, oltp.empresas.natureza_juridica,
+                       oltp.empresas.qualificacao_responsavel, oltp.empresas.capital_social,
+                       oltp.empresas.porte, oltp.empresas.ente_federativo)
+                    IS DISTINCT FROM
+                      (EXCLUDED.razao_social, EXCLUDED.natureza_juridica,
+                       EXCLUDED.qualificacao_responsavel, EXCLUDED.capital_social,
+                       EXCLUDED.porte, EXCLUDED.ente_federativo);
+                """,
+                list(empresas.values()),
+                page_size=1000,
+            )
+            execute_values(
+                cur,
+                """
+                INSERT INTO oltp.socios (
+                    cnpj_basico, data_referencia, tipo_socio, nome_socio, documento_socio,
+                    qualificacao, data_entrada, pais, documento_representante,
+                    nome_representante, qualificacao_representante, faixa_etaria
+                ) VALUES %s
+                ON CONFLICT ON CONSTRAINT unq_socios_retrato DO NOTHING;
+                """,
+                list(socios.values()),
+                page_size=1000,
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
     # Só o mês atual fica em cache.
     for old in Path(CNPJ_CACHE_DIR).glob("*"):
