@@ -10,7 +10,7 @@ O banco tem três schemas com papéis separados:
 
 | Schema | Papel | Tabelas |
 |---|---|---|
-| `oltp` | espelho normalizado da origem | 10 tabelas (abaixo) |
+| `oltp` | espelho normalizado da origem | tabelas operacionais e do quadro societário (abaixo) |
 | `bronze` | resposta bruta de cada chamada às fontes, para auditoria e reprocessamento | `raw_payloads` |
 | `monitoring` | metadados de execução do pipeline | `pipeline_runs`, `job_runs` |
 
@@ -37,6 +37,9 @@ O banco tem três schemas com papéis separados:
                          └────────────────┘
 ```
 
+O diagrama resume as entidades anteriores ao enriquecimento CNPJ; as tabelas `empresas` e `socios`
+e a view `vw_donos_finais` estão descritas abaixo.
+
 ## Tabelas do schema `oltp`
 
 Criadas pelos scripts de `scripts/sql/oltp/`. Toda tabela tem chave primária, `NOT NULL` onde a
@@ -49,6 +52,8 @@ origem garante valor, e `timestamp_ingestao` preenchido pelo banco.
 | `participacoes_comissao` | `id` serial | `UNIQUE (senador_id, comissao_id, cargo, data_inicio)` | `senadores`, `comissoes` | `data_fim >= data_inicio` |
 | `fornecedores` | `id` serial | `UNIQUE (cnpj_cpf)` | Nenhuma | Nenhuma |
 | `despesas` | `id` (identificador do lançamento CEAPS) | a própria PK | `senadores`, `fornecedores` (`RESTRICT`) | `valor >= 0`, `mes` entre 1 e 12, `ano` entre 2000 e 2026 |
+| `empresas` | `(cnpj_basico, data_referencia)` | a própria PK por retrato mensal | `naturezas_juridicas`, `qualificacoes_socio` | raiz do CNPJ com 8 dígitos |
+| `socios` | `id` serial | vínculo único por empresa, retrato, tipo, nome, documento e qualificação | `empresas`, `qualificacoes_socio` | `tipo_socio` em 1, 2, 3 |
 | `estrutura_gabinete` | `id` serial | `UNIQUE (senador_id, ano)` | `senadores` | quantidades `>= 0`; `qtd_total_servidores` gerada |
 | `sessao_plenaria` | `id` serial | `UNIQUE (numero, data_sessao)` | Nenhuma | Nenhuma |
 | `documento_dsf` | `id` serial | `UNIQUE (codigo_diario, pagina_inicial, pagina_final)` | `sessao_plenaria` | `pagina_final >= pagina_inicial`; `status_parser` em `SUCESSO`, `PARCIAL`, `FALHA` |
@@ -87,6 +92,10 @@ O OLTP está em **3FN**: cada fato mora em uma tabela, identificado pela chave d
 - **Fornecedor é entidade própria**, e não texto repetido em cada despesa. Isso permite responder
   “quanto cada fornecedor recebeu e de quais senadores” com um `JOIN` por chave inteira, e corrigir
   a razão social em um único lugar.
+- **Dono final é calculado pela view `vw_donos_finais`.** Ela parte do CNPJ do fornecedor, percorre
+  os vínculos de `socios` entre empresas e devolve `fornecedor_id`, nome, documento, tipo e cadeia
+  societária. Não há chave primária de dono final nem dono gravado em `despesas`; o CPF de pessoa
+  física vem mascarado da Receita Federal.
 - **Presença separa sessão, documento e registro.** Uma sessão pode ter mais de um documento no
   DSF; cada registro aponta para o documento e a página de onde saiu, o que torna cada presença
   auditável.
@@ -175,6 +184,8 @@ scripts/sql/oltp/008_expenses.sql
 scripts/sql/oltp/009_staff.sql
 scripts/sql/monitoring/001_monitoring.sql        montado como 010_monitoring.sql
 scripts/sql/oltp/011_attendance.sql              sessão, documento DSF, presença
+scripts/sql/oltp/012_cnpj_owners.sql             empresas e sócios da Receita Federal
+scripts/sql/oltp/013_donos_finais.sql            view da cadeia societária
 scripts/sql/bronze/001_raw_payloads.sql          montado como 020_bronze.sql
 ```
 
