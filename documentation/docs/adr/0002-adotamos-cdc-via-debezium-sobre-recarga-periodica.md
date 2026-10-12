@@ -13,11 +13,13 @@ quando nenhum valor havia mudado. Já havia um gatilho de revisão definido (mig
 insert-only quando mais de 1% das linhas de `despesas` mudarem de valor entre cargas), que
 depende de conseguir distinguir "mudou" de "não mudou" de forma confiável.
 
-Como pré-requisito desta etapa, o upsert de `despesas` e `fornecedores` passou a ser
-condicional (`WHERE ... IS DISTINCT FROM ...`). Validado em ambiente real: uma carga completa
-inicial (21.430 despesas, 3.516 fornecedores) seguida de uma segunda carga sem nenhuma mudança
-na fonte não tocou nenhuma das 21.430 + 3.516 linhas; antes, a segunda carga reescreveria
-todas. Isso elimina o ruído de evento que um CDC baseado nesse upsert geraria.
+Como pré-requisito desta etapa, os upserts de `despesas` e `fornecedores` passaram a ser
+condicionais (`WHERE ... IS DISTINCT FROM ...`). Em `despesas`, a comparação cobre todas as
+colunas vindas da origem (senador, fornecedor, data, ano, mês, valor, tipo, documento e
+detalhamento), para que uma correção de data ou de fornecedor também seja capturada. Em
+`fornecedores`, todos os fornecedores da carga passam pelo upsert, não só os novos, para que
+uma correção de razão social chegue ao banco. Uma linha só é reescrita, e só gera evento de
+CDC, quando algum desses valores muda de fato.
 
 ## Alternativas consideradas
 
@@ -48,11 +50,10 @@ Essa escolha fica para a próxima etapa da E2, quando o consumidor Bronze/Silver
 Ambiente reproduzível:
 ```bash
 docker compose down -v
-docker compose up --build -d
-make migrate-cdc
-make cdc-up
+make ingestion
 make cdc-register
 make cdc-status
+make cdc-test
 ```
 
 - **`wal_level`:** confirmado `logical` via `SHOW wal_level;` (era `replica` por padrão).
@@ -61,29 +62,41 @@ make cdc-status
 - **Conector:** `inflow-despesas-connector` (Debezium `io.debezium.connector.postgresql.PostgresConnector`,
   imagens oficiais `debezium/zookeeper:2.7.3.Final`, `debezium/kafka:2.7.3.Final`,
   `debezium/connect:2.7.3.Final`), status `"state": "RUNNING"` para o connector e para a task.
+  O registro usa `PUT /connectors/inflow-despesas-connector/config`: reexecutar
+  `make cdc-register` aplica a configuração atual em vez de falhar com conflito.
+- **Credenciais:** o conector lê usuário, senha e banco das mesmas variáveis do `.env` que o
+  Postgres usa (`EnvVarConfigProvider`). Com `POSTGRES_PASSWORD` diferente do padrão, o
+  conector ficou `RUNNING`, e a configuração gravada no Connect guarda só `${env:...}`.
 - **Serialização de decimais:** por padrão o Debezium serializa colunas `NUMERIC` como bytes
   (ex. `"Byvw"`, ilegível); foi preciso `decimal.handling.mode: "string"` na config do conector
   para o campo `valor` chegar legível no payload (`"9999.99"`, `"1234.56"`).
+- **Snapshot inicial:** 21.430 mensagens no tópico `inflow.oltp.despesas`, uma por despesa.
+- **Recarga sem mudança na origem, com CDC ligado:** a segunda carga completa não tocou nenhuma
+  das 21.430 despesas nem dos 3.516 fornecedores e não gerou nenhum evento (o tópico seguiu com
+  21.430 mensagens). Antes do upsert condicional, cada carga reescrevia todas as linhas.
 - **Propagação ponta a ponta (manual):** `UPDATE oltp.despesas SET valor = 1234.56 WHERE id =
-  2218170` gerou um evento no tópico `inflow.oltp.despesas` com `payload.op = "u"`,
-  `payload.before.valor = "9999.99"` e `payload.after.valor = "1234.56"`.
+  2218170` gerou um evento com `payload.op = "u"`, `payload.before.valor = "9999.99"` e
+  `payload.after.valor = "1234.56"`.
 - **Propagação ponta a ponta (automatizada):** `tests/test_cdc_integration.py`, rodado via
-  `make cdc-test`, altera uma despesa, consome o tópico (timeout de 30 s) e confirma o evento:
-  `1 passed in 1.75s`. Guardado por `CDC_INTEGRATION_TEST=1`, não roda no `make test` padrão
-  (confirmado: aparece como `skipped` quando a variável não está setada).
-- **Upsert condicional (pré-requisito):** carga completa (21.430 despesas, 3.516 fornecedores)
-  seguida de uma segunda carga idêntica não tocou nenhuma das linhas (antes: 100% delas eram
-  reescritas a cada carga).
+  `make cdc-test`: `1 passed in 0.99s`. O teste espera o replication slot ficar ativo e o tópico
+  existir, se posiciona no fim do tópico, altera uma despesa, confirma o evento de `UPDATE` com
+  o novo valor e restaura o valor original. Guardado por `CDC_INTEGRATION_TEST=1`, não roda no
+  `make test` padrão.
+- **Reinício do ambiente:** depois de `docker compose down` (sem `-v`) e `make cdc-register`, o
+  tópico seguiu com 21.430 mensagens: os offsets persistidos no volume do Kafka evitam um novo
+  snapshot.
 
 ## Decisão
 
 **Adotamos Debezium + Kafka Connect completo (Zookeeper, Kafka, Kafka Connect) capturando
 mudanças de `oltp.despesas` via logical decoding (`pgoutput`), com publication dedicada e
 upsert condicional como pré-requisito.**
-- `wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10` no serviço `postgres`.
+- `wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10` e
+  `max_slot_wal_keep_size=1GB` no serviço `postgres`.
 - `PUBLICATION inflow_despesas_pub FOR TABLE oltp.despesas` + `REPLICA IDENTITY FULL`.
-- Conector reaproveita o usuário `inflow_user` (já superuser da imagem, com `REPLICATION`
+- Conector reaproveita o usuário do Postgres (já superuser da imagem, com `REPLICATION`
   implícito), sem role dedicada, por simplicidade dado o escopo acadêmico.
+- Dados do Kafka e do Zookeeper em volumes nomeados, para preservar tópicos e offsets.
 - Tópico resultante: `inflow.oltp.despesas`.
 
 ## Consequências
@@ -95,8 +108,9 @@ polling ou comparação de snapshots.
 
 **Limitação conhecida.** Ainda não há um consumidor que persista esses eventos numa camada
 analítica (Bronze/Silver em Parquet/Iceberg/Delta): esta etapa cobre só a captura, não o
-consumo. O replication slot do Postgres acumula WAL indefinidamente se o conector cair e não
-for monitorado.
+consumo. Com o conector parado, o replication slot retém WAL até o limite de 1 GB; passado
+esse limite, o Postgres invalida o slot, e o conector precisa ser registrado de novo, com um
+novo snapshot. `REPLICA IDENTITY FULL` também aumenta o WAL escrito por mudança em `despesas`.
 
 **Perdas.** Nenhuma estrutural: é aditivo, não substitui nada da E1.
 
