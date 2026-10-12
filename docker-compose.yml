@@ -74,6 +74,51 @@ services:
       - "${DOCS_PORT:-3000}:80"
     restart: unless-stopped
 
+  zookeeper:
+    image: debezium/zookeeper:2.7.3.Final
+    container_name: inflow_zookeeper
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    networks:
+      - inflow_network
+
+  kafka:
+    image: debezium/kafka:2.7.3.Final
+    container_name: inflow_kafka
+    depends_on:
+      - zookeeper
+    environment:
+      ZOOKEEPER_CONNECT: zookeeper:2181
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    networks:
+      - inflow_network
+
+  kafka-connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: inflow_kafka_connect
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: inflow_cdc
+      CONFIG_STORAGE_TOPIC: inflow_connect_configs
+      OFFSET_STORAGE_TOPIC: inflow_connect_offsets
+      STATUS_STORAGE_TOPIC: inflow_connect_statuses
+    ports:
+      - "${KAFKA_CONNECT_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - inflow_network
+
 volumes:
   postgres_data:
     name: inflow_postgres_data

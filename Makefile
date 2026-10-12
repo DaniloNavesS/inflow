@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -16,6 +16,7 @@ help:
 		'  make ingestion        Executa a ingestão' \
 		'  make migrate-cnpj     Aplica o esquema CNPJ em banco existente' \
 		'  make migrate-cdc      Cria a publication de CDC em banco existente' \
+		'  make cdc-up           Sobe Zookeeper, Kafka e Kafka Connect' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -50,6 +51,9 @@ migrate-cnpj: start
 
 migrate-cdc: start
 	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/014_cdc_publication.sql'
+
+cdc-up: migrate-cdc
+	$(COMPOSE) up -d --wait zookeeper kafka kafka-connect
 
 ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
