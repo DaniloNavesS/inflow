@@ -107,7 +107,9 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
             VALUES %s
             ON CONFLICT (cnpj_cpf) DO UPDATE SET
                 razao_social = EXCLUDED.razao_social,
-                atualizado_em = CURRENT_TIMESTAMP;
+                atualizado_em = CURRENT_TIMESTAMP
+            WHERE
+                fornecedores.razao_social IS DISTINCT FROM EXCLUDED.razao_social;
         """
 
         with conn.cursor() as cur:
@@ -212,7 +214,13 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
             tipo_documento = EXCLUDED.tipo_documento,
             num_documento = EXCLUDED.num_documento,
             detalhamento = EXCLUDED.detalhamento,
-            atualizado_em = CURRENT_TIMESTAMP;
+            atualizado_em = CURRENT_TIMESTAMP
+        WHERE
+            despesas.valor IS DISTINCT FROM EXCLUDED.valor
+            OR despesas.tipo_despesa IS DISTINCT FROM EXCLUDED.tipo_despesa
+            OR despesas.tipo_documento IS DISTINCT FROM EXCLUDED.tipo_documento
+            OR despesas.num_documento IS DISTINCT FROM EXCLUDED.num_documento
+            OR despesas.detalhamento IS DISTINCT FROM EXCLUDED.detalhamento;
     """
 
     with conn.cursor() as cur:
