@@ -1,20 +1,17 @@
 {
-  "name": "inflow-despesas-connector",
-  "config": {
-    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-    "database.hostname": "postgres",
-    "database.port": "5432",
-    "database.user": "inflow_user",
-    "database.password": "inflow_pass",
-    "database.dbname": "inflow_db",
-    "topic.prefix": "inflow",
-    "schema.include.list": "oltp",
-    "table.include.list": "oltp.despesas",
-    "plugin.name": "pgoutput",
-    "publication.name": "inflow_despesas_pub",
-    "publication.autocreate.mode": "disabled",
-    "slot.name": "inflow_despesas_slot",
-    "tombstones.on.delete": "false",
-    "decimal.handling.mode": "string"
-  }
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "database.hostname": "postgres",
+  "database.port": "5432",
+  "database.user": "${env:POSTGRES_USER}",
+  "database.password": "${env:POSTGRES_PASSWORD}",
+  "database.dbname": "${env:POSTGRES_DB}",
+  "topic.prefix": "inflow",
+  "schema.include.list": "oltp",
+  "table.include.list": "oltp.despesas",
+  "plugin.name": "pgoutput",
+  "publication.name": "inflow_despesas_pub",
+  "publication.autocreate.mode": "disabled",
+  "slot.name": "inflow_despesas_slot",
+  "tombstones.on.delete": "false",
+  "decimal.handling.mode": "string"
 }

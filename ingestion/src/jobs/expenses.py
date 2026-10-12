@@ -55,9 +55,9 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
 
     logger.info("Fornecedores pré-existentes em cache: %d", len(fornecedores_cache))
 
-    # Coleta fornecedores únicos não existentes
+    # Coleta fornecedores únicos da carga
 
-    novos_fornecedores = {}
+    fornecedores_da_carga = {}
 
     senadores_despesas = set()
 
@@ -69,8 +69,8 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
         if not raw_cnpj:
             raw_cnpj = "SEM_DOCUMENTO"
 
-        if raw_cnpj not in fornecedores_cache and raw_cnpj not in novos_fornecedores:
-            novos_fornecedores[raw_cnpj] = razao[:255]
+        if raw_cnpj not in fornecedores_da_carga:
+            fornecedores_da_carga[raw_cnpj] = razao[:255]
 
         cod_senador = d.get("codSenador")
 
@@ -97,10 +97,10 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
 
         conn.commit()
 
-    # Inserção em lote de novos fornecedores com execute_values
+    # Upsert em lote dos fornecedores da carga com execute_values
 
-    if novos_fornecedores:
-        logger.info("Cadastrando %d novos fornecedores...", len(novos_fornecedores))
+    if fornecedores_da_carga:
+        logger.info("Sincronizando %d fornecedores da carga...", len(fornecedores_da_carga))
 
         query_ins_forn = """
             INSERT INTO oltp.fornecedores (cnpj_cpf, razao_social, timestamp_ingestao, atualizado_em)
@@ -116,7 +116,7 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
             execute_values(
                 cur,
                 query_ins_forn,
-                list(novos_fornecedores.items()),
+                list(fornecedores_da_carga.items()),
                 template="(%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 page_size=1000,
             )
@@ -209,6 +209,11 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT (id) DO UPDATE SET
+            senador_id = EXCLUDED.senador_id,
+            fornecedor_id = EXCLUDED.fornecedor_id,
+            data_despesa = EXCLUDED.data_despesa,
+            ano = EXCLUDED.ano,
+            mes = EXCLUDED.mes,
             valor = EXCLUDED.valor,
             tipo_despesa = EXCLUDED.tipo_despesa,
             tipo_documento = EXCLUDED.tipo_documento,
@@ -216,7 +221,12 @@ def ingest_ceaps_despesas(session: requests.Session, conn: psycopg2.extensions.c
             detalhamento = EXCLUDED.detalhamento,
             atualizado_em = CURRENT_TIMESTAMP
         WHERE
-            despesas.valor IS DISTINCT FROM EXCLUDED.valor
+            despesas.senador_id IS DISTINCT FROM EXCLUDED.senador_id
+            OR despesas.fornecedor_id IS DISTINCT FROM EXCLUDED.fornecedor_id
+            OR despesas.data_despesa IS DISTINCT FROM EXCLUDED.data_despesa
+            OR despesas.ano IS DISTINCT FROM EXCLUDED.ano
+            OR despesas.mes IS DISTINCT FROM EXCLUDED.mes
+            OR despesas.valor IS DISTINCT FROM EXCLUDED.valor
             OR despesas.tipo_despesa IS DISTINCT FROM EXCLUDED.tipo_despesa
             OR despesas.tipo_documento IS DISTINCT FROM EXCLUDED.tipo_documento
             OR despesas.num_documento IS DISTINCT FROM EXCLUDED.num_documento

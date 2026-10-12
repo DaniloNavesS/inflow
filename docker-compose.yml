@@ -7,7 +7,8 @@ services:
         "postgres",
         "-c", "wal_level=logical",
         "-c", "max_replication_slots=10",
-        "-c", "max_wal_senders=10"
+        "-c", "max_wal_senders=10",
+        "-c", "max_slot_wal_keep_size=1GB"
       ]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
@@ -79,6 +80,9 @@ services:
     container_name: inflow_zookeeper
     ports:
       - "${ZOOKEEPER_PORT:-2181}:2181"
+    volumes:
+      - zookeeper_data:/zookeeper/data
+      - zookeeper_txns:/zookeeper/txns
     networks:
       - inflow_network
 
@@ -91,6 +95,8 @@ services:
       ZOOKEEPER_CONNECT: zookeeper:2181
     ports:
       - "${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/kafka/data
     networks:
       - inflow_network
 
@@ -108,6 +114,11 @@ services:
       CONFIG_STORAGE_TOPIC: inflow_connect_configs
       OFFSET_STORAGE_TOPIC: inflow_connect_offsets
       STATUS_STORAGE_TOPIC: inflow_connect_statuses
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
     ports:
       - "${KAFKA_CONNECT_PORT:-8083}:8083"
     healthcheck:
@@ -124,6 +135,12 @@ volumes:
     name: inflow_postgres_data
   cnpj_cache:
     name: inflow_cnpj_cache
+  zookeeper_data:
+    name: inflow_zookeeper_data
+  zookeeper_txns:
+    name: inflow_zookeeper_txns
+  kafka_data:
+    name: inflow_kafka_data
 
 networks:
   inflow_network:
