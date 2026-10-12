@@ -2,6 +2,13 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: inflow_postgres
+    command:
+      [
+        "postgres",
+        "-c", "wal_level=logical",
+        "-c", "max_replication_slots=10",
+        "-c", "max_wal_senders=10"
+      ]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
       POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
@@ -13,6 +20,7 @@ services:
       - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
       - ./scripts/sql/oltp/012_cnpj_owners.sql:/migrations/012_cnpj_owners.sql:roZ
       - ./scripts/sql/oltp/013_donos_finais.sql:/migrations/013_donos_finais.sql:roZ
+      - ./scripts/sql/oltp/014_cdc_publication.sql:/migrations/014_cdc_publication.sql:roZ
       - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
       - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:
