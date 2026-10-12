@@ -1,8 +1,13 @@
 COMPOSE=docker compose
 
+ifneq (,$(wildcard .env))
+	include .env
+	export
+endif
+
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -19,6 +24,7 @@ help:
 		'  make cdc-up           Sobe Zookeeper, Kafka e Kafka Connect' \
 		'  make cdc-register     Registra o conector Debezium para despesas' \
 		'  make cdc-status       Mostra o status do conector Debezium' \
+		'  make cdc-test         Roda o teste de propagação de CDC (UPDATE -> Kafka)' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -62,6 +68,9 @@ cdc-register: cdc-up
 
 cdc-status:
 	curl -s http://localhost:$${KAFKA_CONNECT_PORT:-8083}/connectors/inflow-despesas-connector/status | python3 -m json.tool
+
+cdc-test: cdc-register
+	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
 
 ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
