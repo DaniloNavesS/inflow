@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -17,6 +17,8 @@ help:
 		'  make migrate-cnpj     Aplica o esquema CNPJ em banco existente' \
 		'  make migrate-cdc      Cria a publication de CDC em banco existente' \
 		'  make cdc-up           Sobe Zookeeper, Kafka e Kafka Connect' \
+		'  make cdc-register     Registra o conector Debezium para despesas' \
+		'  make cdc-status       Mostra o status do conector Debezium' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -54,6 +56,12 @@ migrate-cdc: start
 
 cdc-up: migrate-cdc
 	$(COMPOSE) up -d --wait zookeeper kafka kafka-connect
+
+cdc-register: cdc-up
+	KAFKA_CONNECT_PORT=$${KAFKA_CONNECT_PORT:-8083} bash scripts/cdc/register-connector.sh
+
+cdc-status:
+	curl -s http://localhost:$${KAFKA_CONNECT_PORT:-8083}/connectors/inflow-despesas-connector/status | python3 -m json.tool
 
 ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
