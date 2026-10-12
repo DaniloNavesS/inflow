@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -16,6 +16,10 @@ help:
 		'  make ingestion        Executa a ingestão' \
 		'  make migrate-cnpj     Aplica o esquema CNPJ em banco existente' \
 		'  make migrate-cdc      Cria a publication de CDC em banco existente' \
+		'  make migrate-janela   Cria o esquema das janelas de despesas em banco existente' \
+		'  make janela           Processa um lote das janelas de despesas (dado atrasado)' \
+		'  make janela-reset     Recomeça as janelas do zero e reprocessa tudo' \
+		'  make janela-test      Roda o teste da regra de dado atrasado' \
 		'  make cdc-up           Sobe Zookeeper, Kafka e Kafka Connect' \
 		'  make cdc-register     Registra o conector Debezium para despesas' \
 		'  make cdc-status       Mostra o status do conector Debezium' \
@@ -55,6 +59,18 @@ migrate-cnpj: start
 migrate-cdc: start
 	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/014_cdc_publication.sql'
 
+migrate-janela: start
+	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/015_janela_despesas.sql'
+
+janela: migrate-janela
+	$(COMPOSE) run --rm ingestion python main.py janela
+
+janela-reset: migrate-janela
+	$(COMPOSE) run --rm ingestion python main.py janela --reiniciar
+
+janela-test: migrate-janela
+	$(COMPOSE) run --rm ingestion pytest -v -p no:cacheprovider /tests/test_janela_dado_atrasado.py
+
 cdc-up: migrate-cdc
 	$(COMPOSE) up -d --wait zookeeper kafka kafka-connect
 
@@ -67,7 +83,7 @@ cdc-status:
 cdc-test: cdc-register
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
 
-ingestion: migrate-cnpj
+ingestion: migrate-cnpj migrate-janela
 	$(COMPOSE) run --rm ingestion
 
 cnpj: migrate-cnpj

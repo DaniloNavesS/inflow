@@ -20,6 +20,10 @@ RFB_CNPJ_MONTH = os.getenv("RFB_CNPJ_MONTH", "")
 CNPJ_CACHE_DIR = os.getenv("CNPJ_CACHE_DIR", "/cache/cnpj")
 CNPJ_OWNER_MAX_DEPTH = int(os.getenv("CNPJ_OWNER_MAX_DEPTH", "5"))
 
+# Dado atrasado: meses que uma janela mensal de despesas segue aberta depois que a
+# competência avança (medição em documentation/docs/metrics/dado-atrasado.mdx)
+LATE_DATA_ALLOWED_MONTHS = int(os.getenv("LATE_DATA_ALLOWED_MONTHS", "2"))
+
 REQUEST_HEADERS = {
     "Accept": "application/json",
     "User-Agent": (

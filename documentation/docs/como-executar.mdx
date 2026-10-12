@@ -28,11 +28,14 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql -f /migrations/013_donos_finais.sql'` |
 | Executar a carga isolada CNPJ | `make cnpj` | `docker compose run --rm ingestion python main.py cnpj` |
 | Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
+| Criar o esquema das janelas de despesas em banco existente | `make migrate-janela` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/015_janela_despesas.sql'` |
+| Processar só as janelas de despesas ([dado atrasado](./metrics/dado-atrasado.mdx)) | `make janela` | `docker compose run --rm ingestion python main.py janela` |
+| Rodar o teste da regra de dado atrasado | `make janela-test` | `docker compose run --rm ingestion pytest -v -p no:cacheprovider /tests/test_janela_dado_atrasado.py` |
 | Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
 | Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
 | Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
 
-`make ingestion` inicia e aguarda o PostgreSQL, aplica a migração CNPJ e executa a carga completa. Para carregar apenas empresas e sócios, use `make cnpj`.
+`make ingestion` inicia e aguarda o PostgreSQL, aplica as migrações CNPJ e de janelas de despesas e executa a carga completa. Para carregar apenas empresas e sócios, use `make cnpj`.
 
 ```bash
 make ingestion
@@ -108,4 +111,5 @@ Pela contagem na origem, a série 2020–2025 leva `despesas` a cerca de 112 mil
 | `INGESTION_YEAR` | ano consultado em CEAPS e estrutura de gabinete | `2024` |
 | `LIMIT_SENADORES` | limita senadores processados em desenvolvimento; `0` processa todos | `0` |
 | `LEGISLATURE` | legislatura de referência | `57` |
+| `LATE_DATA_ALLOWED_MONTHS` | meses que a janela mensal de despesas segue aberta ([dado atrasado](./metrics/dado-atrasado.mdx)) | `2` |
 | `DOCS_PORT` | porta do site de documentação (`make docs`) | `3000` |
