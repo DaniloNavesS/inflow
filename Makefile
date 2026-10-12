@@ -1,10 +1,5 @@
 COMPOSE=docker compose
 
-ifneq (,$(wildcard .env))
-	include .env
-	export
-endif
-
 .DEFAULT_GOAL := help
 
 .PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
@@ -64,10 +59,10 @@ cdc-up: migrate-cdc
 	$(COMPOSE) up -d --wait zookeeper kafka kafka-connect
 
 cdc-register: cdc-up
-	KAFKA_CONNECT_PORT=$${KAFKA_CONNECT_PORT:-8083} bash scripts/cdc/register-connector.sh
+	bash scripts/cdc/register-connector.sh
 
 cdc-status:
-	curl -s http://localhost:$${KAFKA_CONNECT_PORT:-8083}/connectors/inflow-despesas-connector/status | python3 -m json.tool
+	$(COMPOSE) exec -T kafka-connect curl -s http://localhost:8083/connectors/inflow-despesas-connector/status | python3 -m json.tool
 
 cdc-test: cdc-register
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
