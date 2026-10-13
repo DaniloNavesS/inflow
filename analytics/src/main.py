@@ -1,0 +1,53 @@
+"""Camada analítica do InFlow: materializa dados do OLTP em formatos abertos.
+
+Uso:
+    python main.py check   # verifica conexão com o Postgres, extensões e pasta do lake
+"""
+import argparse
+import logging
+import sys
+
+import deltalake
+import duckdb
+
+from config import LAKE_DIR
+from duck import PG, connect
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("inflow_analytics")
+
+SOURCE_TABLES = ("senadores", "fornecedores", "despesas", "empresas", "socios")
+
+
+def check() -> None:
+    logger.info("duckdb %s · deltalake %s", duckdb.__version__, deltalake.__version__)
+
+    con = connect()
+    con.load_extension("delta")
+    for table in SOURCE_TABLES:
+        count = con.execute(f"SELECT count(*) FROM {PG}.oltp.{table}").fetchone()[0]
+        logger.info("Postgres via DuckDB: oltp.%-14s %8d linhas", table, count)
+
+    LAKE_DIR.mkdir(parents=True, exist_ok=True)
+    probe = LAKE_DIR / ".write_probe"
+    probe.write_text("ok")
+    probe.unlink()
+    logger.info("Pasta do lake gravável: %s", LAKE_DIR)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Camada analítica do InFlow")
+    parser.add_argument("command", choices=["check"])
+    args = parser.parse_args()
+
+    if args.command == "check":
+        check()
+
+
+if __name__ == "__main__":
+    main()

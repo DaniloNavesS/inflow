@@ -54,6 +54,27 @@ services:
     networks:
       - inflow_network
 
+  analytics:
+    container_name: inflow_analytics
+    build:
+      context: ./analytics
+      dockerfile: Dockerfile
+    volumes:
+      - ./lake:/lake
+      - ./tests:/tests:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      LAKE_DIR: /lake
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
   docs:
     profiles: ["docs"]
     container_name: inflow_docs

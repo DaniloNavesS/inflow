@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down stop restart ps logs ingestion build-ingestion cnpj test docs docs-build db-shell clean
+.PHONY: up down stop restart ps logs ingestion build-ingestion cnpj test build-analytics lake-check test-lake docs docs-build db-shell clean
 
 up:
 	$(COMPOSE) up -d postgres
@@ -32,6 +32,15 @@ cnpj: up
 
 test: ingestion
 	$(COMPOSE) run --rm ingestion pytest -q -p no:cacheprovider /tests
+
+build-analytics:
+	$(COMPOSE) build analytics
+
+lake-check: up
+	$(COMPOSE) run --rm analytics python main.py check
+
+test-lake: up
+	$(COMPOSE) run --rm analytics pytest -q -p no:cacheprovider /tests/analytics
 
 docs:
 	$(COMPOSE) --profile docs up --build docs
