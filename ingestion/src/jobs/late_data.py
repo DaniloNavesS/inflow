@@ -25,11 +25,14 @@ QUERY_LANCAMENTOS = """
             d.valor,
             CASE
                 WHEN d.data_despesa >= %(data_minima)s::date
+                    AND d.data_despesa < (make_date(d.ano, d.mes, 1) + INTERVAL '1 month')::date
                     THEN date_trunc('month', d.data_despesa)::date
                 ELSE make_date(d.ano, d.mes, 1)
             END AS janela_inicio,
             CASE
-                WHEN d.data_despesa >= %(data_minima)s::date THEN 'DATA_DESPESA'
+                WHEN d.data_despesa >= %(data_minima)s::date
+                    AND d.data_despesa < (make_date(d.ano, d.mes, 1) + INTERVAL '1 month')::date
+                    THEN 'DATA_DESPESA'
                 ELSE 'COMPETENCIA'
             END AS origem_tempo_evento
         FROM {fonte} d
@@ -105,10 +108,10 @@ QUERY_AVANCA_WATERMARK = """
         atraso_permitido_meses = %(atraso)s,
         atualizado_em = CURRENT_TIMESTAMP
     FROM (
-        SELECT (
+        SELECT CASE WHEN count(*) > 0 THEN (
             LEAST(max(make_date(ano, mes, 1)), date_trunc('month', CURRENT_DATE)::date)
             - make_interval(months => %(atraso)s)
-        )::date AS candidato
+        )::date END AS candidato
         FROM {fonte}
     ) m
     WHERE c.fluxo = %(fluxo)s

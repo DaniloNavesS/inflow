@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test cnpj-test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -14,6 +14,7 @@ help:
 		'  make ps               Lista os contêineres' \
 		'  make logs             Acompanha os logs' \
 		'  make ingestion        Executa a ingestão' \
+		'  make cnpj-test        Roda a integração CNPJ em PostgreSQL descartável' \
 		'  make migrate-cnpj     Aplica o esquema CNPJ em banco existente' \
 		'  make migrate-cdc      Cria a publication de CDC em banco existente' \
 		'  make migrate-janela   Cria o esquema das janelas de despesas em banco existente' \
@@ -89,8 +90,20 @@ ingestion: migrate-cnpj migrate-janela
 cnpj: migrate-cnpj
 	$(COMPOSE) run --rm ingestion python main.py cnpj
 
-test: ingestion
-	$(COMPOSE) run --rm ingestion pytest -q -p no:cacheprovider /tests
+test:
+	@set -e; \
+	compose='$(COMPOSE) -p inflow-test-suite -f docker-compose.yml -f tests/docker-compose.test.yml'; \
+	trap "$$compose down --volumes --remove-orphans" EXIT; \
+	$$compose up -d --build --wait postgres; \
+	$$compose run --build --rm ingestion; \
+	$$compose run --rm ingestion pytest -q -p no:cacheprovider --ignore=/tests/test_cnpj_integration.py /tests
+	$(MAKE) cnpj-test
+
+cnpj-test:
+	@set -e; \
+	compose='$(COMPOSE) -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml'; \
+	trap "$$compose down --volumes --remove-orphans" EXIT; \
+	$$compose run --build --rm integration pytest -q -p no:cacheprovider /tests/test_cnpj_integration.py
 
 docs:
 	$(COMPOSE) --profile docs up --build docs

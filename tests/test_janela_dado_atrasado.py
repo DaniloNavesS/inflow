@@ -3,9 +3,10 @@
 Os testes montam uma fonte sintética em tabela temporária, com um fluxo próprio, dentro da
 transação da fixture: não dependem das despesas reais nem deixam nada no banco.
 
-Regra: janela fixa mensal por data_despesa; watermark = 1º dia do mês da maior competência
-já vista - 2 meses; janela com fim <= watermark está fechada. O watermark que classifica um
-lote é o que os lotes anteriores deixaram.
+Regra: usa data_despesa como tempo de evento quando ela é válida e não posterior à competência;
+caso contrário, usa o primeiro dia da competência. Watermark = 1º dia do mês da maior
+competência já vista - 2 meses; janela com fim <= watermark está fechada. O watermark que
+classifica um lote é o que os lotes anteriores deixaram.
 
 Cenário principal (senador 1, atraso permitido de 2 meses):
 
@@ -178,7 +179,7 @@ def test_total_revisado_sempre_bate_com_a_origem(fonte):
     lote_1(fonte)
     lote_2(fonte)
     corrigir(fonte, 1, valor=130)
-    corrigir(fonte, 2, data_despesa="2024-04-02")  # correção que muda a despesa de janela
+    corrigir(fonte, 2, data_despesa="2024-04-02", ano=2024, mes=4)
     lote(fonte)
 
     with fonte.cursor() as cursor:
@@ -198,6 +199,22 @@ def test_watermark_nao_recua_quando_chega_competencia_antiga(fonte):
 
     assert resultado["watermark"] == FEV
     assert resultado["atrasados"] == 1
+
+
+def test_lote_vazio_nao_avanca_watermark_antes_de_despesa_antiga(fonte):
+    vazio = lote(fonte)
+
+    assert vazio["despesas"] == 0
+    assert vazio["watermark_anterior"] is None
+    assert vazio["watermark"] is None
+
+    inserir(fonte, 10, "2024-04-10", (2024, 4))
+    resultado = lote(fonte)
+
+    assert (resultado["watermark_anterior"], resultado["no_prazo"], resultado["atrasados"]) == (
+        None, 1, 0,
+    )
+    assert resultado["watermark"] == datetime.date(2024, 2, 1)
 
 
 def test_data_de_documento_invalida_usa_a_competencia_como_tempo_de_evento(fonte):
@@ -221,6 +238,14 @@ def test_data_de_documento_no_futuro_nao_adianta_o_watermark(fonte):
 
     assert resultado["watermark"] == FEV
     assert resultado["atrasados"] == 0
+    with fonte.cursor() as cursor:
+        cursor.execute(
+            "SELECT janela_inicio, classificacao, origem_tempo_evento"
+            " FROM analytics.janela_despesas_lancamentos"
+            " WHERE fluxo = %s AND despesa_id = 9 AND delta_quantidade = 1",
+            (FLUXO,),
+        )
+        assert cursor.fetchone() == (ABR, "NO_PRAZO", "COMPETENCIA")
 
 
 def test_reiniciar_o_fluxo_reprocessa_tudo_como_um_unico_lote_no_prazo(fonte):

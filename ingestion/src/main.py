@@ -131,18 +131,7 @@ def main():
             run_id,
         )
 
-        # 4. Presença oficial extraída do Diário do Senado Federal
-        execute_monitored_job(
-            conn,
-            run_id,
-            "dsf_attendance",
-            ingest_dsf_attendance,
-            session,
-            conn,
-            run_id,
-        )
-
-        # 5. CEAPS
+        # 4. CEAPS
         execute_monitored_job(
             conn,
             run_id,
@@ -151,6 +140,18 @@ def main():
             session,
             conn,
             INGESTION_YEAR,
+            run_id,
+        )
+
+        # 5. Presença oficial extraída do DSF. A carga CEAPS garante em senadores
+        # as identidades históricas citadas nas despesas, ausentes da lista atual.
+        execute_monitored_job(
+            conn,
+            run_id,
+            "dsf_attendance",
+            ingest_dsf_attendance,
+            session,
+            conn,
             run_id,
         )
 
