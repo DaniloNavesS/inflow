@@ -1,7 +1,8 @@
 """Camada analítica do InFlow: materializa dados do OLTP em formatos abertos.
 
 Uso:
-    python main.py check   # verifica conexão com o Postgres, extensões e pasta do lake
+    python main.py check     # verifica conexão com o Postgres, extensões e pasta do lake
+    python main.py parquet   # materializa despesas_enriquecidas em Parquet particionado
 """
 import argparse
 import logging
@@ -12,6 +13,7 @@ import duckdb
 
 from config import LAKE_DIR
 from duck import PG, connect
+from parquet_export import export_despesas_enriquecidas
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,11 +44,13 @@ def check() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Camada analítica do InFlow")
-    parser.add_argument("command", choices=["check"])
+    parser.add_argument("command", choices=["check", "parquet"])
     args = parser.parse_args()
 
     if args.command == "check":
         check()
+    elif args.command == "parquet":
+        export_despesas_enriquecidas(connect(), LAKE_DIR)
 
 
 if __name__ == "__main__":

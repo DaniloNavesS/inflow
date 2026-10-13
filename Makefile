@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test build-analytics lake-check test-lake docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test build-analytics lake-check lake-parquet test-lake docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -25,6 +25,7 @@ help:
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
 		'  make build-analytics  Reconstrói a imagem da camada analítica' \
 		'  make lake-check       Verifica DuckDB, Postgres e a pasta do lake' \
+		'  make lake-parquet     Materializa despesas_enriquecidas em Parquet' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make docs             Serve a documentação' \
 		'  make docs-build       Constrói a imagem da documentação' \
@@ -84,6 +85,9 @@ build-analytics:
 
 lake-check: start
 	$(COMPOSE) run --rm analytics python main.py check
+
+lake-parquet: start
+	$(COMPOSE) run --rm analytics python main.py parquet
 
 test-lake: start
 	$(COMPOSE) run --rm analytics pytest -q -p no:cacheprovider /tests/analytics
