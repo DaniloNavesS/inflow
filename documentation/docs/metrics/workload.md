@@ -63,8 +63,9 @@ Medida sobre `despesas` (21.430 linhas):
 | `data_despesa` | 469 |
 
 Cardinalidade baixa nas colunas de filtro (88 senadores, 8 tipos) e alta em `fornecedor_id`.
-Isso justifica índices B-Tree compostos começando pela coluna seletiva — `(senador_id, data_despesa)`
-— em vez de índices isolados por coluna de baixa cardinalidade.
+Isso justifica índices B-Tree compostos que começam pela coluna mais seletiva. Para consultas por
+senador e período, usamos `(senador_id, data_despesa)`. Assim, não dependemos de índices isolados
+em colunas de baixa cardinalidade.
 
 Faixa de valores: R$ 1.506,78 de média, R$ 242.400,00 de máximo, R$ 32.290.271,35 de total em 2024.
 
@@ -82,29 +83,28 @@ O padrão é **analítico sobre volume pequeno**: agregação com `GROUP BY` e `
 inteira do ano, não busca por chave primária. Os 4 índices de `despesas` cobrem os recortes por
 senador, por fornecedor, por tipo e por ano/mês.
 
-Escrita acessa o banco por chave natural: `ON CONFLICT` na PK em todas as tabelas — 42.860 varreduras
-de `despesas_pkey` durante a carga (duas por linha, uma de verificação e uma de gravação).
+A escrita acessa o banco pela chave natural: `ON CONFLICT` na PK de todas as tabelas. Durante a
+carga, ocorrem 42.860 varreduras de `despesas_pkey`, duas por linha: uma de verificação
+e outra de gravação.
 
 ## Latência tolerada
 
 - **Consulta de gestão:** até **2 s**. O consumidor é um analista explorando dados, não uma API.
   A folga sobre os 12 ms medidos é de três ordens de magnitude.
 - **Carga:** até **10 min**. Roda em lote, fora de horário de uso; os 90 s atuais ficam bem abaixo.
-- **Frescor do dado:** até **1 mês**. A origem publica o CEAPS mensalmente — não há como estar mais
-  fresco que a fonte, e não faz sentido buscar tempo real.
+- **Frescor do dado:** até **1 mês**. A origem publica o CEAPS mensalmente. Não há como obter dados
+  mais recentes que a fonte, e não faz sentido buscar atualização em tempo real.
 
 ## Sazonalidade
 
 - **Recesso parlamentar** (23/12 a 1/2 e 18 a 31/7): sem sessões deliberativas, logo `sessoes` e
-  `sessoes_presenca` não crescem nesses períodos, mas `despesas` continua — passagens e aluguel de
-  escritório não param.
+  `sessoes_presenca` não cresce nesses períodos, mas `despesas` continua recebendo registros, pois
+  gastos com passagens e aluguel de escritório não param.
 - **Fechamento mensal do CEAPS:** o volume de lançamentos se concentra nos dias seguintes à
   publicação mensal da origem; é quando a carga tem mais linhas novas para gravar.
-- **Fim de exercício:** dezembro concentra prestação de contas e correções retroativas de
-  lançamentos anteriores — o momento em que a sobrescrita descrita na
-  [ADR 0001](adr/0001-modelagem-do-sistema-de-origem.md) mais destrói informação.
+- **Fim de exercício:** dezembro concentra prestação de contas e correções retroativas. Como a carga sobrescreve os valores anteriores, mudanças feitas nesse período podem eliminar o histórico do valor antigo.
 - **Início de legislatura** (a cada 4 anos): troca de 1/3 dos senadores, recomposição de todas as
-  comissões — pico de escrita em `senadores`, `comissoes` e `participacoes_comissao`.
+  comissões. Esse período concentra a escrita em `senadores`, `comissoes` e `participacoes_comissao`.
 
 ## Qualidade do dado na origem
 

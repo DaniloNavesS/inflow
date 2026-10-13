@@ -10,7 +10,7 @@ if Path("/app/src").is_dir():
     sys.path.insert(0, "/app/src")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def db():
     try:
         connection = psycopg2.connect(
@@ -25,5 +25,15 @@ def db():
         pytest.skip(f"PostgreSQL de integração indisponível: {exc}")
     with connection.cursor() as cursor:
         cursor.execute("SET search_path TO oltp, public")
-    yield connection
-    connection.close()
+    try:
+        yield connection
+    finally:
+        connection.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def populated_db(db):
+    if os.getenv("CNPJ_TEST_DATABASE") == "1":
+        pytest.skip("Requer a ingestão completa; o banco CNPJ temporário não contém esses dados.")
+    return db

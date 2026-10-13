@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: inflow_cnpj_test
+      POSTGRES_USER: inflow_test
+      POSTGRES_PASSWORD: inflow_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ../scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ../scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
+      - ../scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U inflow_test -d inflow_cnpj_test"
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+  integration:
+    build:
+      context: ../ingestion
+      dockerfile: Dockerfile
+    volumes:
+      - .:/tests:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: inflow_cnpj_test
+      DB_USER: inflow_test
+      DB_PASSWORD: inflow_test
+      CNPJ_TEST_DATABASE: "1"
+      CNPJ_CACHE_DIR: /tmp/cnpj-cache
+    depends_on:
+      postgres:
+        condition: service_healthy
