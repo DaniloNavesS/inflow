@@ -82,6 +82,10 @@ make cdc-test
   existir, se posiciona no fim do tópico, altera uma despesa, confirma o evento de `UPDATE` com
   o novo valor e restaura o valor original. Guardado por `CDC_INTEGRATION_TEST=1`, não roda no
   `make test` padrão.
+- **Replay do consumidor (13/10/2026):** o mesmo teste agora volta ao offset do evento,
+  relê o payload e comprova duplicação em um destino append-only e convergência em uma
+  projeção por `despesas.id` (`1 passed in 1.10s`). A demonstração e seus limites estão em
+  [Replay e semântica de entrega](../semantica-entrega-cdc.md).
 - **Reinício do ambiente:** depois de `docker compose down` (sem `-v`) e `make cdc-register`, o
   tópico seguiu com 21.430 mensagens: os offsets persistidos no volume do Kafka evitam um novo
   snapshot.

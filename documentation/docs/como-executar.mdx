@@ -39,6 +39,15 @@ make ingestion
 ```
 O banco fica acessível em `localhost:5433`.
 
+## Validar CDC e replay
+
+Depois de carregar despesas com `make ingestion`, execute `make cdc-test`. O
+comando aplica a publication ao banco existente, inicia Debezium, Kafka e
+Kafka Connect, registra o conector e roda o teste de alteração e replay. Use
+`make cdc-status` para conferir o estado do conector. O teste precisa de pelo
+menos uma despesa e restaura o valor modificado ao terminar. Veja a
+[semântica de entrega](./semantica-entrega-cdc.md) para os resultados esperados.
+
 ## Validar a carga CNPJ sem baixar a base nacional
 
 A suíte dedicada sobe PostgreSQL 15 em armazenamento temporário e substitui apenas a listagem e o download por ZIPs sintéticos Latin-1. Ela não executa a ingestão completa nem acessa os arquivos nacionais da Receita.

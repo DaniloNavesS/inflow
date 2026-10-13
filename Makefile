@@ -64,7 +64,7 @@ cdc-register: cdc-up
 cdc-status:
 	$(COMPOSE) exec -T kafka-connect curl -s http://localhost:8083/connectors/inflow-despesas-connector/status | python3 -m json.tool
 
-cdc-test: cdc-register
+cdc-test: cdc-register build-ingestion
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
 
 ingestion: migrate-cnpj
