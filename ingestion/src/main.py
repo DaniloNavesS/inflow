@@ -8,6 +8,7 @@ from jobs.attendance import ingest_dsf_attendance
 from jobs.cnpj_owners import ingest_cnpj_owners
 from jobs.committees import ingest_comissoes_e_participacoes
 from jobs.expenses import ingest_ceaps_despesas
+from jobs.late_data import process_expense_windows, reiniciar_fluxo
 from jobs.senators import ingest_senadores
 from jobs.sessions import ingest_sessoes_presenca
 from jobs.staff import ingest_estrutura_gabinete
@@ -130,7 +131,20 @@ def main():
             run_id,
         )
 
-        # 4. Presença oficial extraída do Diário do Senado Federal
+        # 4. CEAPS
+        execute_monitored_job(
+            conn,
+            run_id,
+            "expenses",
+            ingest_ceaps_despesas,
+            session,
+            conn,
+            INGESTION_YEAR,
+            run_id,
+        )
+
+        # 5. Presença oficial extraída do DSF. A carga CEAPS garante em senadores
+        # as identidades históricas citadas nas despesas, ausentes da lista atual.
         execute_monitored_job(
             conn,
             run_id,
@@ -141,16 +155,13 @@ def main():
             run_id,
         )
 
-        # 5. CEAPS
+        # 5.1 Janelas mensais de despesas, com a regra de dado atrasado
         execute_monitored_job(
             conn,
             run_id,
-            "expenses",
-            ingest_ceaps_despesas,
-            session,
+            "expense_windows",
+            process_expense_windows,
             conn,
-            INGESTION_YEAR,
-            run_id,
         )
 
         # 6. Estrutura de Gabinete
@@ -256,8 +267,37 @@ def main_cnpj():
     finally:
         conn.close()
 
+def main_janela(reiniciar: bool = False):
+    """Processa só as janelas de despesas; com --reiniciar, recomeça o fluxo do zero."""
+    pipeline_start = time.perf_counter()
+    conn = wait_for_database()
+    run_id = start_pipeline(conn=conn, pipeline_name="expense_windows")
+    try:
+        if reiniciar:
+            reiniciar_fluxo(conn)
+        execute_monitored_job(conn, run_id, "expense_windows", process_expense_windows, conn)
+        finish_pipeline(
+            conn=conn,
+            run_id=run_id,
+            duration_seconds=time.perf_counter() - pipeline_start,
+        )
+    except Exception as exc:
+        conn.rollback()
+        fail_pipeline(
+            conn=conn,
+            run_id=run_id,
+            duration_seconds=time.perf_counter() - pipeline_start,
+            error_message=str(exc),
+        )
+        logger.exception("Erro no processamento das janelas de despesas: %s", exc)
+        sys.exit(1)
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["cnpj"]:
         main_cnpj()
+    elif sys.argv[1:2] == ["janela"]:
+        main_janela(reiniciar="--reiniciar" in sys.argv[2:])
     else:
         main()
