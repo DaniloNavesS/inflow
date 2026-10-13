@@ -148,9 +148,10 @@ Leitura dos números:
 - **Os dois formatos reescrevem o arquivo de dados a cada lote.** Com uma só correção o tamanho
   dobrou (452 para 903 kB em Delta, 477 para 961 kB em Iceberg).
 
-Essa medição foi feita com o script acima em Windows, contra um PostgreSQL 16 local carregado
-pelo job `expenses`. O comando Docker precisa ser executado para confirmar a tabela no ambiente
-do projeto.
+A tabela acima foi medida em Windows, contra um PostgreSQL 16 local carregado pelo job
+`expenses`. O mesmo script foi reproduzido em 13/10/2026 no Docker com PostgreSQL 15 e
+21.430 despesas: os três formatos terminaram com 21.431 linhas após o lote, e as versões
+anteriores continuaram legíveis em Delta e Iceberg. Os tempos variaram entre ambientes.
 
 ## Decisão
 

@@ -56,9 +56,9 @@ problema já registrado em [Caracterização da carga](./workload.md#qualidade-d
 
 | Elemento | Definição |
 |---|---|
-| Tempo de evento | `data_despesa`. Se for anterior a `2000-01-01`, vale o primeiro dia da competência (`ano`, `mes`), e o lançamento fica marcado com `origem_tempo_evento = 'COMPETENCIA'` |
+| Tempo de evento | `data_despesa`, quando está entre `2000-01-01` e o fim da competência (`ano`, `mes`). Fora desse intervalo, vale o primeiro dia da competência e o lançamento fica marcado com `origem_tempo_evento = 'COMPETENCIA'` |
 | Janela | fixa, de um mês civil: do dia 1 ao dia 1 do mês seguinte, por senador |
-| Watermark | primeiro dia do mês da maior competência já vista, menos o atraso permitido. Nunca recua |
+| Watermark | primeiro dia do mês da maior competência já vista, menos o atraso permitido. Não avança com lote vazio e nunca recua |
 | Atraso permitido | 2 meses (`LATE_DATA_ALLOWED_MONTHS`) |
 | Janela fechada | aquela cujo fim é menor ou igual ao watermark |
 | Lote | cada execução do job. O watermark que classifica um lote é o que os lotes anteriores deixaram; ele só avança no fim do lote |
@@ -130,10 +130,10 @@ Cenário principal, com um senador, despesas de R$ 100 e atraso permitido de 2 m
 | 2 | despesa de 20/03 e despesa de 15/01, ambas na competência de maio | 1 `NO_PRAZO`, 1 `ATRASADO` | no prazo 100, ajuste 100 | `2024-03-01`: fevereiro fecha |
 | 3 | correções de valor: despesa de janeiro vai a 130, despesa de abril vai a 150 | 2 `NO_PRAZO`, 2 `ATRASADO` | no prazo 100, ajuste 130 | `2024-03-01` |
 
-Os 11 testes cobrem ainda: reexecução sem mudança não gera lançamento; `total_revisado` bate
+Os 12 testes cobrem ainda: lote vazio não avança o watermark; reexecução sem mudança não gera lançamento; `total_revisado` bate
 com a origem mesmo quando uma correção muda a despesa de janela; o watermark não recua com
-competência antiga; data inválida usa a competência; data de documento no futuro não adianta o
-watermark; reiniciar o fluxo reprocessa tudo como um único lote.
+competência antiga; data inválida ou futura usa a competência como janela; reiniciar o fluxo
+reprocessa tudo como um único lote.
 
 ## Comportamento com os dados reais
 
