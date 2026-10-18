@@ -18,7 +18,10 @@ O comando inicia o PostgreSQL, aplica as migrations pendentes e executa a carga.
 ## Testar
 
 ```bash
-make test
+make test              # Testes unitários e de qualidade dos dados
+make cdc-test          # Teste de propagação de eventos CDC (Postgres -> Kafka)
+make cdc-semantics     # Teste de semântica de entrega e replay (At-least-once vs. Effectively-once)
+make cdc-replay-demo   # Demonstração comparativa de replay no terminal
 ```
 
 ## Documentação
@@ -71,14 +74,19 @@ O pipeline consulta as APIs do Senado Federal, processa os dados e os persiste n
 ## Comandos principais
 
 ```bash
-make up          # Sobe a infraestrutura
-make ingestion   # Executa a ingestão
-make build       # Reconstrói o ingestor
-make db-shell    # Acessa o PostgreSQL
-make logs        # Exibe os logs
-make ps          # Lista os containers
-make down        # Encerra o ambiente
-make clean       # Remove containers e volumes
+make start            # Sobe o PostgreSQL e aguarda healthcheck
+make ingestion        # Executa a carga do banco
+make cdc-up           # Sobe infraestrutura CDC (Zookeeper, Kafka, Kafka Connect)
+make cdc-register     # Registra conector Debezium de despesas
+make cdc-test         # Roda teste de propagação de eventos CDC
+make cdc-semantics    # Roda teste de replay e deduplicação
+make cdc-replay-demo  # Executa demonstração formatada de replay no terminal
+make test             # Executa a suíte de testes de qualidade
+make db-shell         # Acessa o PostgreSQL via psql
+make logs             # Exibe os logs dos contêineres
+make ps               # Lista os contêineres ativos
+make down             # Encerra o ambiente
+make clean            # Remove contêineres e volumes persistentes
 ```
 
 ---

@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test build-ingestion cnpj migrate-cnpj migrate-cdc cdc-up cdc-register cdc-status cdc-test cdc-semantics cdc-replay-demo docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -20,6 +20,8 @@ help:
 		'  make cdc-register     Registra o conector Debezium para despesas' \
 		'  make cdc-status       Mostra o status do conector Debezium' \
 		'  make cdc-test         Roda o teste de propagação de CDC (UPDATE -> Kafka)' \
+		'  make cdc-semantics    Roda o teste de semântica de entrega (replay e deduplicação)' \
+		'  make cdc-replay-demo  Executa a demonstração formatada de replay do CDC' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -66,6 +68,12 @@ cdc-status:
 
 cdc-test: cdc-register build-ingestion
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
+
+cdc-semantics: cdc-register build-ingestion
+	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -v -p no:cacheprovider /tests/test_delivery_semantics.py
+
+cdc-replay-demo: cdc-register build-ingestion
+	$(COMPOSE) run --rm -v ./scripts:/scripts:ro -e KAFKA_HOST=kafka ingestion python /scripts/cdc/replay_demo.py
 
 ingestion: migrate-cnpj
 	$(COMPOSE) run --rm ingestion
