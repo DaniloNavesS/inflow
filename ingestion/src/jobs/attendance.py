@@ -1,5 +1,6 @@
 import hashlib
 import io
+import logging
 import re
 from dataclasses import dataclass
 
@@ -7,6 +8,11 @@ import pdfplumber
 
 from bronze.raw import save_raw_payload
 from domain import normalize_name
+
+logger = logging.getLogger("inflow_ingestor")
+URL_SENADORES_LEGISLATURA = (
+    "https://legis.senado.leg.br/dadosabertos/senador/lista/legislatura/57.json"
+)
 
 
 DSF_SAMPLES = (
@@ -104,14 +110,74 @@ def resolve_senator(name: str, senators_by_name: dict[str, set[int]]) -> tuple[i
     return None, "NAO_RESOLVIDA"
 
 
+def _senators_from_legislature(session) -> list[dict]:
+    response = session.get(URL_SENADORES_LEGISLATURA, timeout=120)
+    response.raise_for_status()
+    records = (
+        response.json()
+        .get("ListaParlamentarLegislatura", {})
+        .get("Parlamentares", {})
+        .get("Parlamentar", [])
+    )
+    return records if isinstance(records, list) else [records]
+
+
+def _register_historical_attendees(conn, rows, roster, senators_by_name, senator_ids):
+    names_in_document = {normalize_name(row.name) for row in rows}
+    matched_profiles = []
+    for record in roster:
+        identity = record.get("IdentificacaoParlamentar", {})
+        aliases = {
+            normalize_name(identity.get("NomeParlamentar", "")),
+            normalize_name(identity.get("NomeCompletoParlamentar", "")),
+        } - {""}
+        if aliases & names_in_document:
+            matched_profiles.append((identity, aliases))
+
+    with conn.cursor() as cur:
+        for identity, aliases in matched_profiles:
+            senator_id = int(identity["CodigoParlamentar"])
+            if senator_id not in senator_ids:
+                row = next(
+                    row for row in rows
+                    if normalize_name(row.name) in aliases
+                )
+                cur.execute(
+                    """
+                    INSERT INTO oltp.senadores
+                        (id, nome, nome_completo, partido, uf, status)
+                    VALUES (%s, %s, %s, %s, %s, 'Exercício Passado')
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        senator_id,
+                        identity.get("NomeParlamentar") or row.name,
+                        identity.get("NomeCompletoParlamentar"),
+                        identity.get("SiglaPartidoParlamentar") or row.party,
+                        identity.get("UfParlamentar") or row.uf,
+                    ),
+                )
+                senator_ids.add(senator_id)
+            for alias in aliases:
+                senators_by_name.setdefault(alias, set()).add(senator_id)
+
+
 def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute("SELECT id, nome, nome_completo FROM oltp.senadores")
         senators_by_name: dict[str, set[int]] = {}
+        senator_ids = set()
         for senator_id, short_name, full_name in cur.fetchall():
+            senator_ids.add(senator_id)
             for value in (short_name, full_name):
                 if value:
                     senators_by_name.setdefault(normalize_name(value), set()).add(senator_id)
+
+    try:
+        roster = _senators_from_legislature(session)
+    except Exception as exc:
+        roster = []
+        logger.warning("Lista histórica da 57ª legislatura indisponível: %s", exc)
 
     metrics = []
     for sample in samples:
@@ -128,6 +194,9 @@ def ingest_dsf_attendance(session, conn, run_id, samples=DSF_SAMPLES) -> list[di
         try:
             rows = parse_attendance_pages(
                 extract_pdf_text_by_page(content), sample["first_page"]
+            )
+            _register_historical_attendees(
+                conn, rows, roster, senators_by_name, senator_ids
             )
             resolved = [resolve_senator(row.name, senators_by_name) for row in rows]
             unresolved = sum(1 for senator_id, _ in resolved if senator_id is None)

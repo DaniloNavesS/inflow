@@ -27,7 +27,11 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Subir o PostgreSQL e criar o esquema | `make start` | `docker compose up -d postgres` |
 | Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql -f /migrations/013_donos_finais.sql'` |
 | Executar a carga isolada CNPJ | `make cnpj` | `docker compose run --rm ingestion python main.py cnpj` |
-| Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
+| Executar a carga completa | `make ingestion` | `docker compose run --build --rm ingestion` |
+| Criar o esquema das janelas de despesas em banco existente | `make migrate-janela` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/015_janela_despesas.sql'` |
+| Processar só as janelas de despesas ([dado atrasado](./metrics/dado-atrasado.mdx)) | `make janela` | `docker compose run --build --rm ingestion python main.py janela` |
+| Reiniciar e reprocessar as janelas | `make janela-reset` | `docker compose run --build --rm ingestion python main.py janela --reiniciar` |
+| Rodar o teste da regra de dado atrasado | `make janela-test` | `docker compose run --build --rm ingestion pytest -v -p no:cacheprovider /tests/test_janela_dado_atrasado.py` |
 | Subir Zookeeper, Kafka e Kafka Connect | `make cdc-up` | `docker compose up -d zookeeper kafka kafka-connect` |
 | Registrar conector Debezium de despesas | `make cdc-register` | `bash scripts/cdc/register-connector.sh` |
 | Testar propagação de CDC no Kafka | `make cdc-test` | `docker compose run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py` |
@@ -37,7 +41,7 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
 | Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
 
-`make ingestion` inicia e aguarda o PostgreSQL, aplica a migração CNPJ e executa a carga completa. Para carregar apenas empresas e sócios, use `make cnpj`.
+`make ingestion` inicia e aguarda o PostgreSQL, aplica as migrações CNPJ e de janelas de despesas e executa a carga completa. Para carregar apenas empresas e sócios, use `make cnpj`.
 
 ```bash
 make ingestion
@@ -122,4 +126,5 @@ Pela contagem na origem, a série 2020–2025 leva `despesas` a cerca de 112 mil
 | `INGESTION_YEAR` | ano consultado em CEAPS e estrutura de gabinete | `2024` |
 | `LIMIT_SENADORES` | limita senadores processados em desenvolvimento; `0` processa todos | `0` |
 | `LEGISLATURE` | legislatura de referência | `57` |
+| `LATE_DATA_ALLOWED_MONTHS` | meses que a janela mensal de despesas segue aberta ([dado atrasado](./metrics/dado-atrasado.mdx)) | `2` |
 | `DOCS_PORT` | porta do site de documentação (`make docs`) | `3000` |
