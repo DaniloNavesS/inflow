@@ -171,7 +171,9 @@ def reiniciar_fluxo(conn, fluxo: str = FLUXO_DESPESAS) -> None:
         cur.execute("DELETE FROM analytics.janela_controle WHERE fluxo = %s", (fluxo,))
 
 
-def process_expense_windows(conn) -> dict:
+def process_expense_windows(conn, reiniciar: bool = False) -> dict:
+    if reiniciar:
+        reiniciar_fluxo(conn)
     resultado = processar_lote(conn)
     conn.commit()
     logger.info(

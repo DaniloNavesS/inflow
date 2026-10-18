@@ -8,7 +8,7 @@ from jobs.attendance import ingest_dsf_attendance
 from jobs.cnpj_owners import ingest_cnpj_owners
 from jobs.committees import ingest_comissoes_e_participacoes
 from jobs.expenses import ingest_ceaps_despesas
-from jobs.late_data import process_expense_windows, reiniciar_fluxo
+from jobs.late_data import process_expense_windows
 from jobs.senators import ingest_senadores
 from jobs.sessions import ingest_sessoes_presenca
 from jobs.staff import ingest_estrutura_gabinete
@@ -273,9 +273,10 @@ def main_janela(reiniciar: bool = False):
     conn = wait_for_database()
     run_id = start_pipeline(conn=conn, pipeline_name="expense_windows")
     try:
-        if reiniciar:
-            reiniciar_fluxo(conn)
-        execute_monitored_job(conn, run_id, "expense_windows", process_expense_windows, conn)
+        execute_monitored_job(
+            conn, run_id, "expense_windows", process_expense_windows, conn,
+            reiniciar=reiniciar,
+        )
         finish_pipeline(
             conn=conn,
             run_id=run_id,

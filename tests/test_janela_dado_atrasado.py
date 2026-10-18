@@ -25,6 +25,7 @@ from decimal import Decimal
 
 import pytest
 
+import jobs.late_data as late_data
 from jobs.late_data import processar_lote, reiniciar_fluxo
 
 FLUXO = "teste_janela"
@@ -256,3 +257,26 @@ def test_reiniciar_o_fluxo_reprocessa_tudo_como_um_unico_lote_no_prazo(fonte):
 
     assert (resultado["lote"], resultado["no_prazo"], resultado["atrasados"]) == (1, 6, 0)
     assert janelas(fonte)[JAN] == ("FECHADA", 200, 0, 200)
+
+
+def test_reinicio_nao_faz_commit_se_reprocessamento_falha(monkeypatch):
+    chamadas = []
+
+    class Connection:
+        def commit(self):
+            chamadas.append("commit")
+
+    def apagar_estado(_conn):
+        chamadas.append("reset")
+
+    def falhar_no_reprocessamento(_conn):
+        chamadas.append("processamento")
+        raise RuntimeError("falha simulada")
+
+    monkeypatch.setattr(late_data, "reiniciar_fluxo", apagar_estado)
+    monkeypatch.setattr(late_data, "processar_lote", falhar_no_reprocessamento)
+
+    with pytest.raises(RuntimeError, match="falha simulada"):
+        late_data.process_expense_windows(Connection(), reiniciar=True)
+
+    assert chamadas == ["reset", "processamento"]

@@ -2,7 +2,7 @@ COMPOSE=docker compose
 
 .DEFAULT_GOAL := help
 
-.PHONY: help start down stop restart ps logs ingestion test cnpj-test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test docs docs-build db-shell clean
+.PHONY: help start down stop restart ps logs ingestion test cnpj-test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test cdc-semantics cdc-replay-demo docs docs-build db-shell clean
 
 help:
 	@printf '%s\n' \
@@ -25,6 +25,8 @@ help:
 		'  make cdc-register     Registra o conector Debezium para despesas' \
 		'  make cdc-status       Mostra o status do conector Debezium' \
 		'  make cdc-test         Roda o teste de propagação de CDC (UPDATE -> Kafka)' \
+		'  make cdc-semantics    Roda o teste de semântica de entrega (replay e deduplicação)' \
+		'  make cdc-replay-demo  Executa a demonstração formatada de replay do CDC' \
 		'  make test             Executa a ingestão e os testes' \
 		'  make build-ingestion  Reconstrói a imagem do ingestor' \
 		'  make cnpj             Executa a carga de empresas e sócios da RFB' \
@@ -63,13 +65,13 @@ migrate-cdc: start
 migrate-janela: start
 	$(COMPOSE) exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /migrations/015_janela_despesas.sql'
 
-janela: migrate-janela
+janela: migrate-janela build-ingestion
 	$(COMPOSE) run --rm ingestion python main.py janela
 
-janela-reset: migrate-janela
+janela-reset: migrate-janela build-ingestion
 	$(COMPOSE) run --rm ingestion python main.py janela --reiniciar
 
-janela-test: migrate-janela
+janela-test: migrate-janela build-ingestion
 	$(COMPOSE) run --rm ingestion pytest -v -p no:cacheprovider /tests/test_janela_dado_atrasado.py
 
 cdc-up: migrate-cdc
@@ -84,7 +86,13 @@ cdc-status:
 cdc-test: cdc-register
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
 
-ingestion: migrate-cnpj migrate-janela
+cdc-semantics: cdc-register build-ingestion
+	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -v -p no:cacheprovider /tests/test_delivery_semantics.py
+
+cdc-replay-demo: cdc-register build-ingestion
+	$(COMPOSE) run --rm -v ./scripts:/scripts:ro -e KAFKA_HOST=kafka ingestion python /scripts/cdc/replay_demo.py
+
+ingestion: migrate-cnpj migrate-janela build-ingestion
 	$(COMPOSE) run --rm ingestion
 
 cnpj: migrate-cnpj
