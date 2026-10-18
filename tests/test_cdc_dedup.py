@@ -1,4 +1,6 @@
 """Testes unitários para o módulo de deduplicação de eventos CDC."""
+import pytest
+
 from cdc.dedup import AppendConsumer, IdempotentDeduplicator
 
 
@@ -128,3 +130,12 @@ def test_simulated_stream_replay_comparison():
     assert dedup_consumer.total_unique == 5
     assert dedup_consumer.duplicates_ignored == 5
 
+
+def test_idempotent_deduplicator_rejects_event_without_lsn():
+    dedup = IdempotentDeduplicator(key_field="id")
+    event = _make_debezium_event(despesa_id=1, valor=100.0, lsn=1000)
+    event["payload"]["source"]["lsn"] = None
+
+    with pytest.raises(ValueError, match="sem LSN válido"):
+        dedup.consume(event)
+    assert dedup.total_unique == 0

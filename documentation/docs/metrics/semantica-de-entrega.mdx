@@ -24,17 +24,17 @@ Se a aplicação consumidora for construída de forma ingênua (*append-only* ce
 
 Para demonstrar o comportamento na prática, implementamos:
 
-1. **Módulo de Estratégias de Consumo ([`ingestion/src/cdc/dedup.py`](file:///c:/Users/manue/OneDrive/Documentos/Projetos/inflow/ingestion/src/cdc/dedup.py)):**
+1. **Módulo de Estratégias de Consumo (`ingestion/src/cdc/dedup.py`):**
    * `AppendConsumer`: Consumidor ingênuo que anexa cegamente cada mensagem recebida em uma lista de eventos.
-   * `IdempotentDeduplicator`: Consumidor idempotente que mantém um estado indexado pela chave primária (`id`) e utiliza o **LSN** (*Log Sequence Number* do PostgreSQL) e o *timestamp* da transação (`ts_ms`) como critério estrito de ordenação causal. Se uma mensagem chega com LSN menor ou igual ao já processado para aquele ID, ela é sumariamente descartada como duplicata obsoleta.
+   * `IdempotentDeduplicator`: Consumidor idempotente que mantém um estado indexado pela chave primária (`id`) e utiliza o **LSN** (*Log Sequence Number* do PostgreSQL) como critério de ordenação causal; eventos sem LSN válido são rejeitados. Se uma mensagem chega com LSN menor ou igual ao já processado para aquele ID, ela é sumariamente descartada como duplicata obsoleta.
 
-2. **Teste de Integração de Replay ([`tests/test_delivery_semantics.py`](file:///c:/Users/manue/OneDrive/Documentos/Projetos/inflow/tests/test_delivery_semantics.py)):**
+2. **Teste de Integração de Replay (`tests/test_delivery_semantics.py`):**
    * Conecta ao Kafka real via `KafkaConsumer`.
    * **1ª Passada:** Consome $N$ eventos reais do tópico `inflow.oltp.despesas` desde o início da partição.
    * **Simulação de Replay:** Executa `consumer.seek(partition, start_offset)`, retrocedendo o ponteiro de leitura do consumidor para a posição inicial (forçando a releitura de todos os eventos).
    * **2ª Passada:** Reconsome exatamente os mesmos $N$ eventos e compara o resultado final de ambas as estratégias.
 
-3. **Script Demonstrativo Interativo ([`scripts/cdc/replay_demo.py`](file:///c:/Users/manue/OneDrive/Documentos/Projetos/inflow/scripts/cdc/replay_demo.py)):**
+3. **Script Demonstrativo Interativo (`scripts/cdc/replay_demo.py`):**
    * Utilitário CLI para executar o replay sob demanda e imprimir a tabela comparativa diretamente no terminal.
 
 ---

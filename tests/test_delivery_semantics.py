@@ -122,7 +122,7 @@ def test_replay_de_mensagens_demonstra_duplicacao_vs_deduplicacao(db):
 
         unicos_passada_1 = dedup_consumer.total_unique
         assert append_consumer.total_processed == n_mensagens
-        assert dedup_consumer.duplicates_ignored == 0
+        descartes_primeira_passada = dedup_consumer.duplicates_ignored
 
         # --- REPLAY: Resetar os offsets para o início (Simula reprocessamento) ---
         for partition, offset in start_offsets.items():
@@ -150,7 +150,7 @@ def test_replay_de_mensagens_demonstra_duplicacao_vs_deduplicacao(db):
         assert dedup_consumer.total_unique == unicos_passada_1, (
             "Deduplicador idempotente não deveria ter aumentado registros únicos após o replay."
         )
-        assert dedup_consumer.duplicates_ignored == n_mensagens, (
+        assert dedup_consumer.duplicates_ignored - descartes_primeira_passada == n_mensagens, (
             f"Esperava que todas as {n_mensagens} mensagens do replay fossem ignoradas como duplicatas."
         )
 

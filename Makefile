@@ -69,10 +69,10 @@ cdc-status:
 cdc-test: cdc-register
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py
 
-cdc-semantics: cdc-register
+cdc-semantics: cdc-register build-ingestion
 	$(COMPOSE) run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -v -p no:cacheprovider /tests/test_delivery_semantics.py
 
-cdc-replay-demo: cdc-register
+cdc-replay-demo: cdc-register build-ingestion
 	$(COMPOSE) run --rm -v ./scripts:/scripts:ro -e KAFKA_HOST=kafka ingestion python /scripts/cdc/replay_demo.py
 
 ingestion: migrate-cnpj

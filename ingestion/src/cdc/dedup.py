@@ -3,7 +3,7 @@
 Fornece estratégias de consumo para demonstrar a semântica de entrega:
 - AppendConsumer: Acumula cegamente todos os eventos recebidos (gera duplicatas no replay).
 - IdempotentDeduplicator: Deduplica eventos usando chave primária e ordenação lógica
-  por LSN (Log Sequence Number do Postgres) ou timestamp (ts_ms).
+  por LSN (Log Sequence Number do Postgres).
 """
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,7 +35,7 @@ class AppendConsumer:
 
 
 class IdempotentDeduplicator:
-    """Consumidor idempotente com deduplicação por chave e LSN/timestamp.
+    """Consumidor idempotente com deduplicação por chave e LSN.
 
     Garante semântica de entrega 'effectively-once' mesmo sob 'at-least-once'
     ou reprocessamento (replay) intencional.
@@ -43,7 +43,7 @@ class IdempotentDeduplicator:
 
     def __init__(self, key_field: str = "id") -> None:
         self.key_field = key_field
-        # Mapeia key_id -> (lsn_or_ts, record_data, is_deleted)
+        # Mapeia key_id -> (lsn, record_data, is_deleted)
         self._state: Dict[Any, Tuple[int, Optional[Dict[str, Any]], bool]] = {}
         self.total_received: int = 0
         self.duplicates_ignored: int = 0
@@ -60,7 +60,7 @@ class IdempotentDeduplicator:
         if key_id is None:
             key_id = before.get(self.key_field)
 
-        # LSN ou timestamp para ordenação causal das versões
+        # O timestamp é informativo; apenas o LSN ordena versões.
         lsn = source.get("lsn")
         ts_ms = body.get("ts_ms") or source.get("ts_ms") or 0
 
@@ -87,7 +87,9 @@ class IdempotentDeduplicator:
         if record.key_id is None:
             return False
 
-        version = record.lsn if isinstance(record.lsn, int) else (record.ts_ms or 0)
+        if not isinstance(record.lsn, int) or isinstance(record.lsn, bool):
+            raise ValueError("Evento CDC sem LSN válido; não é seguro ordená-lo por timestamp")
+        version = record.lsn
         is_deleted = record.op == "d"
 
         if record.key_id in self._state:
