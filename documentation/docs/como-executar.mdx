@@ -28,6 +28,11 @@ cp .env.example .env                  # no PowerShell: Copy-Item .env.example .e
 | Migrar o esquema CNPJ em banco existente | `make migrate-cnpj` | `docker compose exec -T postgres sh -c 'psql --single-transaction -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/012_cnpj_owners.sql -f /migrations/013_donos_finais.sql'` |
 | Executar a carga isolada CNPJ | `make cnpj` | `docker compose run --rm ingestion python main.py cnpj` |
 | Executar a carga completa | `make ingestion` | `docker compose run --rm ingestion` |
+| Subir Zookeeper, Kafka e Kafka Connect | `make cdc-up` | `docker compose up -d zookeeper kafka kafka-connect` |
+| Registrar conector Debezium de despesas | `make cdc-register` | `bash scripts/cdc/register-connector.sh` |
+| Testar propagação de CDC no Kafka | `make cdc-test` | `docker compose run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -q -p no:cacheprovider /tests/test_cdc_integration.py` |
+| Testar semântica de entrega e replay | `make cdc-semantics` | `docker compose run --rm -e CDC_INTEGRATION_TEST=1 ingestion pytest -v -p no:cacheprovider /tests/test_delivery_semantics.py` |
+| Executar demonstração de replay de CDC | `make cdc-replay-demo` | `docker compose run --rm -v ./scripts:/scripts:ro -e KAFKA_HOST=kafka ingestion python /scripts/cdc/replay_demo.py` |
 | Rodar os testes de qualidade | `make test` | `docker compose run --rm ingestion pytest -q -p no:cacheprovider /tests` |
 | Abrir o `psql` | `make db-shell` | `docker compose exec postgres psql -U inflow_user -d inflow_db` |
 | Apagar banco e volume (recomeçar do zero) | `make clean` | `docker compose down -v` |
@@ -47,6 +52,33 @@ A suíte dedicada sobe PostgreSQL 15 em armazenamento temporário e substitui ap
 docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml run --rm --build integration pytest -q -p no:cacheprovider /tests/test_cnpj_integration.py
 docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml down
 ```
+
+## Change Data Capture (CDC) e Semântica de Entrega
+
+Para iniciar o fluxo de streaming de eventos e validar a semântica de entrega (replay e deduplicação):
+
+1. **Subir mensageria e registrar conector:**
+   ```bash
+   make cdc-register
+   ```
+   *(Sobe Zookeeper, Kafka, Kafka Connect e registra o conector Debezium para a tabela `despesas`).*
+
+2. **Verificar status do conector:**
+   ```bash
+   make cdc-status
+   ```
+
+3. **Rodar teste de integração de replay (At-least-once vs. Effectively-once):**
+   ```bash
+   make cdc-semantics
+   ```
+
+4. **Executar demonstração interativa no terminal:**
+   ```bash
+   make cdc-replay-demo
+   ```
+
+Para a fundamentação teórica e medições empíricas, consulte [Semântica de Entrega e Replay](./metrics/semantica-de-entrega.mdx).
 
 ## O que acontece na primeira subida
 
