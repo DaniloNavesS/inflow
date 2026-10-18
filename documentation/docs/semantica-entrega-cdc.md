@@ -1,46 +1,24 @@
 ---
-title: Replay e semântica de entrega do CDC
+title: CDC e semântica de entrega
 ---
 
-# Replay do CDC de despesas
+# CDC e semântica de entrega — E2
 
-O tópico `inflow.oltp.despesas` é um log de eventos. O conector e um consumidor
-podem repetir uma mensagem após falha e retomada de offset. Não há garantia de
-*exactly once* entre o WAL, o Kafka e um destino externo.
+Na E2, Ana, Yza e Manu ficaram com os itens 1, 3 e 7: CDC, semântica de entrega e diário de bordo. O registro é da equipe; o histórico Git não atribui cada etapa a uma pessoa.
 
-## Prova reproduzível
+| Entrega | O que foi feito | Evidência |
+|---|---|---|
+| CDC | Debezium lê o WAL do PostgreSQL e publica mudanças de `oltp.despesas` no tópico `inflow.oltp.despesas`. | `tests/test_cdc_integration.py` altera uma despesa e confere o novo valor no tópico. |
+| Replay | O teste relê o mesmo offset: uma lista acumula duas entradas; a projeção por `despesas.id` fica com uma. | `tests/test_cdc_integration.py` nesta branch. |
+| Deduplicação | O [PR 27](https://github.com/DaniloNavesS/inflow/pull/27), já na `develop`, acrescentou teste de replay com deduplicação por chave e LSN. | `tests/test_delivery_semantics.py` e `make cdc-semantics` na `develop`. |
+| Diário | Registro das semanas 7 a 10 a partir do histórico Git. | `documentation/squad/processos/03-diario-de-bordo-semanas-7-a-10.mdx` nesta branch. |
 
-Com uma carga de despesas já existente, execute:
+Execute após carregar despesas com `make ingestion`:
 
 ```bash
 make cdc-test
 ```
 
-O teste `tests/test_cdc_integration.py` espera o slot e o tópico, posiciona o
-consumidor no fim, altera o `valor` de uma despesa e confirma o evento `op=u`
-com o novo valor. Em seguida, faz `seek` para o **mesmo tópico, partição e
-offset**, lê novamente a mensagem e compara os payloads desserializados. O teste
-restaura o valor inicial no `finally`; essa restauração também gera um evento.
+O teste restaura o valor original ao terminar. Na execução local de 13/10/2026, passou com o conector `RUNNING` e 21.430 despesas carregadas (`1 passed in 1.10s`).
 
-O próprio teste aplica as duas leituras a dois destinos simulados:
-
-| Destino | Chave | Resultado do mesmo evento duas vezes |
-|---|---|---|
-| Lista append-only | nenhuma | 2 registros: duplica |
-| Projeção de estado | `despesas.id` | 1 registro: converge para o último valor |
-
-Essa releitura é um **replay deliberado do consumidor**, não uma demonstração de
-que o Debezium duplicou a publicação. A garantia observada é que o consumidor
-pode ver o mesmo offset novamente. Um destino append-only de produção precisa
-deduplicar por `(tópico, partição, offset)` ou por identificador estável do
-evento. Uma tabela de estado deve fazer upsert por `despesas.id` e tratar
-`DELETE` removendo a chave. A projeção no teste só cobre `UPDATE`; ainda não é
-um consumidor persistente nem prova tratamento de falhas entre gravação e
-commit de offset.
-
-Na validação local de 13/10/2026, `make cdc-test` terminou com `1 passed in
-1.10s`, usando um banco com 21.430 despesas e o conector em estado `RUNNING`.
-
-O snapshot inicial também publica um evento por linha antes dos eventos de
-alteração. Consumidores que constroem estado precisam aplicar snapshot e
-alterações na ordem de cada partição.
+**Limite:** o replay é provocado pelo consumidor com `seek`; ele não prova que o Debezium publicou a mensagem duas vezes. As projeções dos testes ficam em memória. Ainda não há garantia de processamento exatamente uma vez em um destino persistente.

@@ -41,12 +41,11 @@ O banco fica acessível em `localhost:5433`.
 
 ## Validar CDC e replay
 
-Depois de carregar despesas com `make ingestion`, execute `make cdc-test`. O
-comando aplica a publication ao banco existente, inicia Debezium, Kafka e
-Kafka Connect, registra o conector e roda o teste de alteração e replay. Use
-`make cdc-status` para conferir o estado do conector. O teste precisa de pelo
-menos uma despesa e restaura o valor modificado ao terminar. Veja a
-[semântica de entrega](./semantica-entrega-cdc.md) para os resultados esperados.
+Com despesas já carregadas, execute `make cdc-test`. O comando sobe o CDC,
+altera uma despesa, verifica a mudança no Kafka e relê a mensagem para testar
+o replay. O valor original é restaurado ao final. Para conferir o conector,
+use `make cdc-status`. Os resultados e limites do teste estão em
+[CDC e semântica de entrega](./semantica-entrega-cdc.md).
 
 ## Validar a carga CNPJ sem baixar a base nacional
 

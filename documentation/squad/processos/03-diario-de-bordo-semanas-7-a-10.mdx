@@ -5,44 +5,28 @@ sidebar_label: Diário de bordo (7–10)
 
 # Diário de bordo — semanas 7 a 10
 
-Este registro usa os marcos que aparecem no histórico Git da `develop` em
-13/10/2026. A correspondência entre datas e semanas acadêmicas ainda precisa
-ser confirmada com o calendário da disciplina; os rótulos abaixo organizam os
-marcos em sequência, sem atribuir presença em reuniões ou decisões individuais
-que o repositório não comprova.
+Registro baseado no histórico Git. As datas abaixo indicam os commits; a correspondência exata com as semanas da disciplina ainda precisa ser conferida.
 
-## Semana 7 — base da documentação (09/09/2026)
+## Semana 7 — documentação (09/09)
 
-- O site de documentação em Docusaurus e o fluxo de publicação por GitHub Actions
-  começaram a ser versionados (`2ea63c3`, `23b6a30`).
-- Pendente de registro: reunião, responsáveis e decisões discutidas fora do Git.
+- Entraram o site em Docusaurus e a publicação por GitHub Actions (`2ea63c3`, `23b6a30`).
 
-## Semana 8 — primeira entrega e modelagem (25–28/09/2026)
+## Semana 8 — E1 (25–28/09)
 
-- Entraram DDL relacional, ingestão inicial, Docker Compose e Makefile
-  (`a0c4398`, `5825e90`, `366eefa`).
-- Foram adicionadas migrações, ADR 0001, medições de carga de trabalho, testes
-  de qualidade e presença documental (`4308699`, `46c95d8`, `f4b2e5a`,
-  `ec35716`, `8d8e17c`).
-- A documentação do squad passou a registrar processo e divisão de frentes
-  (`250b7c2`).
+- Entraram o esquema relacional, a carga inicial e a execução por Docker Compose (`a0c4398`, `5825e90`, `366eefa`).
+- Foram adicionados o ADR 0001, testes de qualidade e medições da carga (`46c95d8`, `f4b2e5a`, `ec35716`).
 
-## Semana 9 — reconciliação de CNPJ e escopo (05–06/10/2026)
+## Semana 9 — CNPJ (05–06/10)
 
-- A carga de empresas e sócios da Receita ganhou migração, teste de integração
-  isolado e correção de reconciliação (`7bcfe38`, `39d31de`, `642911c`).
-- O escopo de donos finais e as perguntas da E1 foram documentados (`178c502`).
+- A carga da Receita ganhou migração, teste isolado e correção da reconciliação de sócios (`7bcfe38`, `39d31de`, `642911c`).
 
-## Semana 10 — início da E2 (12–13/10/2026)
+## Semana 10 — CDC e replay (12–13/10)
 
-- A `develop` recebeu CDC de `oltp.despesas` com Debezium, Kafka, publication,
-  upsert condicional e teste de propagação (`e9259dd` a `1d61f03`).
-- O ADR 0002 registrou a escolha inicial de CDC e suas limitações (`9a8ee7a`,
-  `014febf`).
-- Em 13/10, a revisão local confirmou que havia 21.430 despesas no volume
-  existente. O CDC foi ativado com `wal_level=logical`, o conector ficou
-  `RUNNING` e `make cdc-test` terminou com `1 passed in 1.10s` após
-  reconstruir o ingestor. O teste agora inclui replay do mesmo offset.
-- Pendências da E2: materialização em Parquet e Iceberg/Delta, regra de dado
-  atrasado, comparação completa no ADR e justificativa de compressão. Há
-  trabalho dessas frentes em branches remotas que ainda não integra a `develop`.
+- Debezium passou a publicar alterações de `oltp.despesas` no Kafka; um teste confirma o `UPDATE` no tópico (`e9259dd` a `1d61f03`).
+- O teste de replay lê o mesmo offset duas vezes e mostra duplicação sem controle e convergência por chave (`f8768cc`).
+- Em 13/10, `make cdc-test` passou com o conector `RUNNING` e 21.430 despesas carregadas (`1 passed in 1.10s`).
+
+## Atualização após a semana 10 (18/10)
+
+- O PR 27 entrou na `develop` com teste adicional de replay e deduplicação por chave e LSN (`9978ae4`).
+- A camada analítica, o tratamento de dado atrasado, a justificativa de compressão e a comparação completa no ADR dependem das outras frentes da E2.
