@@ -1,4 +1,4 @@
-# 0003 — Adotamos DuckDB com Parquet e Delta e escolhemos o particionamento por medições equivalentes
+# 0003: Adotamos DuckDB com Parquet e Delta e escolhemos o particionamento por medições equivalentes
 
 - **Status:** aceito
 - **Data:** 2026-10-19
