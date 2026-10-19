@@ -22,9 +22,19 @@ make test              # Testes unitários e de qualidade dos dados
 make cdc-test          # Teste de propagação de eventos CDC (Postgres -> Kafka)
 make cdc-semantics     # Teste de semântica de entrega e replay (At-least-once vs. Effectively-once)
 make cdc-replay-demo   # Demonstração comparativa de replay no terminal
+make test-lake        # Testes analíticos com PostgreSQL e lake descartáveis
 ```
 
 ## Documentação
+
+### Camada analítica
+
+Após carregar a origem, execute `make ingestion && make lake` para materializar
+`lake/parquet/despesas_enriquecidas/` e `lake/delta/despesas/`, comparar duas consultas de
+gestão com o PostgreSQL e registrar a execução em `monitoring.pipeline_runs`.
+Os resultados e tempos ficam em `lake/consumo.json`. Veja o
+[guia da camada analítica](documentation/docs/camada-analitica.mdx) para os limites e comandos.
+
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
 modelagem, limitações e decisões arquiteturais estão na
@@ -56,10 +66,10 @@ cp .env.example .env
 ### 3. Suba a infraestrutura
 
 ```bash
-make up
+make start
 ```
 
-Esse comando inicia o PostgreSQL.
+Esse comando inicia o PostgreSQL e aguarda o healthcheck.
 
 ### 4. Execute a ingestão
 
@@ -76,6 +86,7 @@ O pipeline consulta as APIs do Senado Federal, processa os dados e os persiste n
 ```bash
 make start            # Sobe o PostgreSQL e aguarda healthcheck
 make ingestion        # Executa a carga do banco
+make lake             # Materializa Parquet/Delta e compara consultas de gestão
 make cdc-up           # Sobe infraestrutura CDC (Zookeeper, Kafka, Kafka Connect)
 make cdc-register     # Registra conector Debezium de despesas
 make cdc-test         # Roda teste de propagação de eventos CDC
@@ -97,7 +108,7 @@ Configuração padrão:
 
 ```text
 Host: localhost
-Porta: 5432
+Porta: 5433 (no host; 5432 entre contêineres)
 Database: inflow_db
 Usuário: inflow_user
 Senha: inflow_pass

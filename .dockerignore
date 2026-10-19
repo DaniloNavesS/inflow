@@ -1,0 +1,10 @@
+.git
+.env
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+.venv
+lake
+resultados
+resultados-adr
+documentation/build

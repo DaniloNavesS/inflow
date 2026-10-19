@@ -1,0 +1,250 @@
+---
+title: Camada analítica — Parquet e Delta
+sidebar_position: 8
+---
+
+# Camada analítica
+
+O PostgreSQL continua sendo a origem. O serviço `analytics` lê o OLTP em modo somente
+leitura e materializa duas representações com propósitos diferentes:
+
+| Saída | Conteúdo | Atualização |
+|---|---|---|
+| `lake/parquet/despesas_enriquecidas/` | Despesa com senador, fornecedor e cadastro empresarial mais recente | Reconstrução completa, particionada por ano/mês |
+| `lake/delta/despesas/` | Colunas de `oltp.despesas`, incluindo `id` e timestamps | `MERGE` por `id`, com versões anteriores preservadas |
+| `lake/consumo.json` | Resultados e tempos das consultas de gestão nos três caminhos | Substituído a cada comparação bem-sucedida |
+
+Delta usa arquivos Parquet para os dados e um log transacional para identificar a versão
+válida da tabela. Os arquivos Delta devem ser lidos com `delta_scan`, nunca com um glob de
+todos os arquivos Parquet: o glob também incluiria arquivos de versões antigas.
+
+## Executar
+
+Com Docker, Compose, Make e `.env` configurados na raiz:
+
+```bash
+make ingestion && make lake
+```
+
+O primeiro comando carrega o OLTP. O segundo constrói a imagem analítica, publica o Parquet,
+sincroniza o Delta e compara consultas com o PostgreSQL. O lake fica montado no diretório
+`lake/` do host, sobrevivendo ao contêiner. O banco deve ter as migrações e dados da ingestão;
+`make lake` sozinho não faz a carga do Senado.
+
+Para executar apenas uma materialização:
+
+```bash
+make build-analytics
+make lake-check
+make lake-parquet
+make lake-delta
+```
+
+`make lake` registra uma execução `analytics_lake` em `monitoring.pipeline_runs`, com os jobs
+`lake_parquet`, `lake_delta` e `lake_consumption` em `monitoring.job_runs`. Uma divergência nas
+consultas ou erro na exportação marca o job e o pipeline como `failed` e encerra o comando com
+erro. A execução é independente da execução `senate_ingestion`; os comandos encadeados com
+`&&` garantem que a materialização comece depois de uma ingestão concluída.
+
+```sql
+SELECT pipeline_name, status, started_at, duration_seconds, error_message
+FROM monitoring.pipeline_runs
+WHERE pipeline_name = 'analytics_lake'
+ORDER BY started_at DESC;
+```
+
+## Consultas de gestão
+
+O código canônico está em `analytics/src/consumption.py`. Executa cada consulta cinco vezes
+por origem e registra a mediana em milissegundos, incluindo a transferência dos resultados,
+sem incluir abertura da conexão ou materialização. Não limpa caches: os tempos misturam a
+primeira leitura com repetições aquecidas e não constituem um benchmark de leitura fria.
+
+1. **Pergunta 1: média mensal por senador e ano.** Soma os totais mensais e divide pelo número
+   de meses com despesas. Meses ausentes não entram como zero. Numerador e denominador são
+   comparados exatamente; a média é calculada com `Decimal` em Python para evitar diferenças
+   de precisão entre os motores SQL.
+2. **Pergunta 11: categoria de maior gasto por senador e ano.** Soma por categoria e retorna
+   todas as categorias empatadas em primeiro lugar.
+
+Os resultados completos e ordenados são comparados, não apenas a quantidade de linhas.
+`consumo.json` contém as colunas, os resultados e `postgres_ms`, `parquet_ms` e `delta_ms`
+lado a lado para cada pergunta. As perguntas de presença e de identificação de atipicidade
+por LLM não são atendidas por essa tabela de despesas.
+
+Para consultar o histórico de versões, dentro do serviço `analytics`:
+
+```python
+from deltalake import DeltaTable
+
+atual = DeltaTable('/lake/delta/despesas')
+print(atual.version())
+print(atual.history())
+anterior = DeltaTable('/lake/delta/despesas', version=0).to_pyarrow_table()
+```
+
+## Atualização e limites
+
+- O Delta recebe um **snapshot completo**, não um lote Kafka. IDs novos são inseridos,
+  campos alterados são atualizados e IDs ausentes na origem são removidos da versão atual.
+  A mesma chave não aparece duas vezes. Uma reexecução sem mudanças não reescreve linhas
+  iguais; não é necessário prometer que toda versão da biblioteca evitará commits vazios.
+- A leitura da origem ainda é completa. Este job não implementa consumo incremental do CDC,
+  checkpoint de offsets nem publicação conjunta transacional de Parquet e Delta.
+- A origem vazia produz saídas vazias legíveis. Não passe um lote parcial a `merge_snapshot`,
+  pois ausências são interpretadas como exclusões.
+- O Parquet tem bloqueio local de escritores, restaura a versão anterior se a publicação
+  falhar e recupera uma troca interrompida na próxima execução. A troca usa dois renames;
+  leitores concorrentes podem observar um intervalo sem o diretório. O fluxo suportado é
+  materializar e depois consultar, com um pipeline por vez.
+- A comparação posterior acusa divergência se o OLTP mudar durante a execução. Para medir
+  consistentemente, execute depois da ingestão, sem escritores concorrentes.
+- O enriquecimento empresarial usa o retrato mais recente carregado, não o cadastro vigente
+  na data da despesa. A exportação não contém a cadeia de donos finais.
+- Não há `VACUUM` automático no Delta. A retenção/limpeza de dados e logs precisa de uma
+  política antes de uso prolongado; remover arquivos antigos pode impedir time travel.
+
+## Testes
+
+```bash
+make test-lake
+```
+
+Sobe PostgreSQL 15 e um lake descartáveis em um projeto Compose separado, aplica as
+migrações e usa quatro despesas sintéticas identificadas como cenário de teste. Não usa os
+volumes do ambiente local e encerra os contêineres e volumes temporários ao final.
+
+Os testes cobrem igualdade com o PostgreSQL, tipos e partições Parquet, reexecução, origem
+vazia, recuperação de publicação, correção Delta com versão anterior legível, exclusão de
+IDs e status de sucesso/falha no monitoramento.
+
+O terminal mostra cada teste (`PASSED`/`FAILED`), uma tabela de tempos das duas consultas e
+o total final. Os testes funcionais usam quatro despesas: esses tempos não indicam escala.
+
+## Experimento de escala
+
+A [ADR 0003](./adr/0003-consumo-analitico-duckdb-parquet-e-delta.md) registra a decisão,
+as novas medições da base real de 21.430 despesas e os gráficos que separam os dois layouts
+na base real e na escala sintética.
+
+Para medir a base real sem alterar os registros:
+
+```bash
+make benchmark-lake-real
+```
+
+Esse comando usa todas as linhas atuais de `oltp.despesas`, em sessão somente leitura,
+e cria cópias temporárias dos formatos; não executa a geração sintética nem suas alterações
+de esquema, índices ou estatísticas. O comando abaixo continua reservado ao banco descartável.
+
+```bash
+make benchmark-lake
+```
+
+Compara 10 mil, 100 mil e 1 milhão de despesas sintéticas determinísticas, com um
+PostgreSQL exclusivo do benchmark. O banco real e os arquivos do lake não são alterados.
+O benchmark valida os resultados em cada execução e compara PostgreSQL com DuckDB lendo
+Parquet puro, Delta e Iceberg. A imagem inclui as dependências e extensões dos três formatos.
+
+Os nomes dos testes e os tempos são impressos no terminal. Os relatórios persistem no host:
+
+```text
+resultados/benchmark-lake/<data-da-execucao>/
+  relatorio.md
+  resultado.csv
+  resultado.json
+```
+
+O JSON inclui amostras individuais, planos `EXPLAIN`, versões, preparação e tamanhos. O banco e os arquivos
+temporários dos formatos são removidos ao final. Para variar a carga:
+
+```bash
+make benchmark-lake BENCHMARK_ROWS="10000 50000 100000 500000 1000000" BENCHMARK_REPETITIONS=7
+```
+
+As consultas têm perfis diferentes:
+
+| Consulta | O que investiga |
+|---|---|
+| Agregação completa | Ler poucas colunas e agrupar muitos registros |
+| Filtro mensal | Filtrar ano/mês, comparando os três formatos com e sem partição e o índice PostgreSQL |
+| Busca por ID | Acesso pontual, cenário em que a chave primária PostgreSQL pode ser vantajosa |
+
+Os motores são aquecidos antes das medições, a ordem é alternada com semente fixa e são
+reportadas medianas. O PostgreSQL tem chave primária, índices e estatísticas atualizadas.
+O tempo inclui trazer os resultados para Python. A comparação mede o conjunto
+**PostgreSQL via rede Docker** contra **DuckDB com arquivos locais**, não somente o formato.
+Na versão 2, **os três formatos são escritos nos dois layouts**: sem partição e por identidade
+em `ano` e `mes`. Os seis caminhos de arquivo e o PostgreSQL são medidos na mesma rodada
+aleatorizada. A referência PostgreSQL é única nos dois layouts. Todos usam ZSTD, mas escritores
+distintos podem escolher tamanhos de arquivo e row groups diferentes. Não se pode atribuir toda
+diferença exclusivamente ao formato. A ADR usa sete repetições; o padrão dos comandos continua
+sendo cinco, configurável por `BENCHMARK_REPETITIONS`.
+
+Particionar não significa criar um índice: é separar arquivos por chaves para permitir
+descartar conjuntos de arquivos. Pode ajudar filtros seletivos e também aumentar o custo
+de abrir muitos arquivos pequenos. A versão atual registra número de arquivos e verifica as
+definições de partição Delta e Iceberg. O custo de exportação Iceberg inclui a inicialização
+do catálogo SQLite, além da tabela e da escrita.
+
+### O que significa "valer a pena"
+
+Uma consulta mais rápida não compensa automaticamente o custo de criar uma cópia. O relatório
+estima, para cada consulta e formato:
+
+```text
+economia_por_consulta = tempo_postgresql - tempo_arquivo
+consultas_para_amortizar = teto((leitura_da_origem + escrita_do_formato) / economia_por_consulta)
+```
+
+Se o arquivo não for mais rápido, aparece `não`. Se forem necessárias 500 consultas para
+amortizar, mas só houver dez consultas entre atualizações, a cópia não se paga pelo tempo
+medido. A fórmula não inclui a geração dos dados sintéticos, pois eles representam dados que
+já existiriam na origem. Também não inclui manutenção, armazenamento adicional ou o esforço
+de operar o pipeline.
+
+O primeiro volume em que Parquet vence é uma **observação desta execução**. Não existe um
+limiar universal em número de linhas: largura da tabela, distribuição, índices, filtros,
+concorrência, hardware, cache e frequência de atualização alteram o resultado. Verifique a
+estabilidade nos volumes seguintes e repita próximo da região de interesse. Os dados
+sintéticos permitem um experimento controlado, mas não substituem medir a carga real.
+
+## Entendendo Parquet, Delta e Apache Iceberg
+
+| Tecnologia | O que é | Papel no exemplo de despesas |
+|---|---|---|
+| Apache Parquet | Formato de arquivo que organiza dados em colunas e suporta compressão | Guardar despesas para ler, por exemplo, apenas `senador_id` e `valor` |
+| Delta Lake | Formato de tabela e protocolo transacional, usando arquivos Parquet e um log | Registrar quais arquivos formam a versão atual, aplicar atualizações e acessar versões anteriores |
+| Apache Iceberg | Formato de tabela com metadados, manifestos e snapshots | Gerenciar arquivos de dados, versões e evolução de esquema/particionamento, acessíveis por motores compatíveis |
+| DuckDB | Motor que executa SQL | Ler os arquivos/tabelas e calcular agregações |
+| PostgreSQL | Banco relacional com motor SQL, índices e transações | Manter a origem operacional e responder consultas diretamente |
+
+Uma correção de R$ 100,00 para R$ 101,23 ilustra a diferença. Em Parquet puro, o arquivo é
+reescrito ou substituído pela aplicação; não há histórico transacional da tabela embutido
+no formato. Delta e Iceberg publicam uma nova versão da tabela, mantendo a versão anterior
+legível enquanto seus metadados e arquivos forem preservados. Eles não tornam toda consulta
+mais rápida e não dispensam um motor SQL.
+
+Iceberg pode usar Parquet, ORC ou Avro para dados; neste projeto o experimento usa Parquet.
+Seu catálogo identifica a tabela e seus metadados atuais; o exemplo local usa SQLite via
+PyIceberg. Isso não significa que uma implantação Iceberg sempre precise de um servidor
+SQLite: há outros catálogos e integrações.
+
+Referências oficiais: [Apache Parquet](https://parquet.apache.org/docs/),
+[Delta Lake](https://docs.delta.io/delta-faq/),
+[Apache Iceberg — especificação](https://iceberg.apache.org/spec/).
+
+## Parquet se justifica aqui?
+
+Para cerca de 21 mil despesas, o PostgreSQL já atende às agregações propostas. Não existe
+evidência nesta implementação de que uma camada adicional seja necessária por desempenho.
+Parquet oferece uma exportação compacta, portátil e consultável sem manter o PostgreSQL
+conectado; a leitura colunar do DuckDB pode evitar colunas e grupos de linhas desnecessários.
+
+O custo é manter cópias, materialização, testes de consistência e dados defasados entre as
+execuções. Para o escopo acadêmico de comparar formatos, faz sentido manter Parquet como
+referência simples e Delta para demonstrar atualização e histórico. Fora desse requisito,
+uma solução apenas com PostgreSQL ou views materializadas seria uma alternativa mais simples.
+
+Referências: [leitura de Parquet no DuckDB](https://duckdb.org/docs/current/data/parquet/overview),
+[Delta Lake com delta-rs](https://delta-io.github.io/delta-rs/).

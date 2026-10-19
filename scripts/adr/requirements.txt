@@ -1,0 +1,6 @@
+# Versões registradas na medição da ADR; ambiente separado da ingestão.
+duckdb==1.5.6
+pyarrow==26.0.0
+deltalake==1.6.6
+pyiceberg[sql-sqlite]==0.12.0
+psycopg2-binary==2.9.13
