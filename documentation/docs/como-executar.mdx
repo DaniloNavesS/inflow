@@ -48,6 +48,15 @@ make ingestion
 ```
 O banco fica acessível em `localhost:5433`.
 
+## Validar CDC e replay
+
+Depois de `make ingestion`, execute `make cdc-test` para alterar uma despesa e
+verificar o evento no Kafka. `make cdc-semantics` compara o replay com e sem
+deduplicação; `make cdc-replay-demo` mostra os contadores no terminal. Os
+comandos sobem o CDC e registram o conector quando necessário. Veja o fluxo,
+os resultados esperados e os limites em
+[CDC e semântica de entrega](./semantica-entrega-cdc.md).
+
 ## Validar a carga CNPJ sem baixar a base nacional
 
 A suíte dedicada sobe PostgreSQL 15 em armazenamento temporário e substitui apenas a listagem e o download por ZIPs sintéticos Latin-1. Ela não executa a ingestão completa nem acessa os arquivos nacionais da Receita.
@@ -56,33 +65,6 @@ A suíte dedicada sobe PostgreSQL 15 em armazenamento temporário e substitui ap
 docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml run --rm --build integration pytest -q -p no:cacheprovider /tests/test_cnpj_integration.py
 docker compose -p inflow-cnpj-integration -f tests/docker-compose.cnpj.yml down
 ```
-
-## Change Data Capture (CDC) e Semântica de Entrega
-
-Para iniciar o fluxo de streaming de eventos e validar a semântica de entrega (replay e deduplicação):
-
-1. **Subir mensageria e registrar conector:**
-   ```bash
-   make cdc-register
-   ```
-   *(Sobe Zookeeper, Kafka, Kafka Connect e registra o conector Debezium para a tabela `despesas`).*
-
-2. **Verificar status do conector:**
-   ```bash
-   make cdc-status
-   ```
-
-3. **Rodar teste de integração de replay (At-least-once vs. Effectively-once):**
-   ```bash
-   make cdc-semantics
-   ```
-
-4. **Executar demonstração interativa no terminal:**
-   ```bash
-   make cdc-replay-demo
-   ```
-
-Para a fundamentação teórica e medições empíricas, consulte [Semântica de Entrega e Replay](./metrics/semantica-de-entrega.mdx).
 
 ## O que acontece na primeira subida
 

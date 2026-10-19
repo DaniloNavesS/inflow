@@ -9,9 +9,7 @@ if os.getenv("CDC_INTEGRATION_TEST") != "1":
         "Requer Kafka/Kafka Connect no ar; rode via `make cdc-test`.", allow_module_level=True
     )
 
-kafka = pytest.importorskip("kafka")
-KafkaConsumer = kafka.KafkaConsumer
-TopicPartition = kafka.TopicPartition
+from kafka import KafkaConsumer, TopicPartition
 
 KAFKA_HOST = os.getenv("KAFKA_HOST", "kafka")
 KAFKA_PORT = os.getenv("KAFKA_PORT", "9092")
@@ -58,6 +56,8 @@ def test_update_em_despesas_propaga_para_o_topico_de_cdc(db):
     )
 
     evento_encontrado = None
+    mensagem_original = None
+    mensagem_replay = None
     try:
         _wait_until(lambda: CDC_TOPIC in consumer.topics(), f"Tópico {CDC_TOPIC} não foi criado.")
         partitions = [
@@ -79,7 +79,19 @@ def test_update_em_despesas_propaga_para_o_topico_de_cdc(db):
             after = payload.get("after") or {}
             if payload.get("op") == "u" and after.get("id") == despesa_id:
                 evento_encontrado = payload
+                mensagem_original = message
                 break
+
+        if mensagem_original is not None:
+            # Releitura explícita do mesmo offset: simula reinício antes do commit
+            # do offset do consumidor, sem depender de uma falha aleatória.
+            partition = TopicPartition(mensagem_original.topic, mensagem_original.partition)
+            consumer.assign([partition])
+            consumer.seek(partition, mensagem_original.offset)
+            replay = consumer.poll(timeout_ms=10_000, max_records=1)
+            mensagens = replay.get(partition, [])
+            if mensagens:
+                mensagem_replay = mensagens[0]
     finally:
         consumer.close()
         db.rollback()
@@ -94,3 +106,17 @@ def test_update_em_despesas_propaga_para_o_topico_de_cdc(db):
     )
     assert evento_encontrado["op"] == "u"
     assert float(evento_encontrado["after"]["valor"]) == novo_valor
+    assert mensagem_replay is not None, "O replay do offset não retornou a mensagem."
+    assert mensagem_replay.offset == mensagem_original.offset
+    assert mensagem_replay.value == mensagem_original.value
+
+    # Um destino append-only sem controle gravaria duas linhas. Uma projeção
+    # por chave primária converge para uma linha com o valor mais recente.
+    eventos_append_only = [mensagem_original.value, mensagem_replay.value]
+    despesas_por_id = {}
+    for evento in eventos_append_only:
+        after = evento.get("payload", evento)["after"]
+        despesas_por_id[after["id"]] = after
+    assert len(eventos_append_only) == 2
+    assert len(despesas_por_id) == 1
+    assert float(despesas_por_id[despesa_id]["valor"]) == novo_valor
