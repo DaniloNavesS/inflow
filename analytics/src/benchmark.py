@@ -7,6 +7,7 @@ import argparse
 import csv
 import datetime
 import json
+import hashlib
 import math
 import os
 import platform
@@ -35,6 +36,9 @@ QUERIES = {
         WHERE ano = 2024 AND mes = 6 GROUP BY senador_id ORDER BY 1""",
     "busca_por_id": "SELECT id, valor, detalhamento FROM {source} WHERE id = {id}",
 }
+COLUMNS = "id, senador_id, fornecedor_id, data_despesa, ano, mes, tipo_despesa, tipo_documento, num_documento, detalhamento, valor"
+LAYOUTS = ("sem_particao", "ano_mes")
+FORMATS = ("parquet", "delta", "iceberg")
 
 
 def timed(function):
@@ -85,16 +89,17 @@ def generate(db, rows):
     db.autocommit = False
 
 
-def measure_queries(db, con, sources, repetitions, rows, export_times):
+def measure_queries(db, con, sources, repetitions, rows, export_times,
+                    postgres_source, lookup_id):
     results = []
     randomizer = random.Random(42)
     for name, template in QUERIES.items():
         def run(engine):
             if engine == "postgres":
                 with db.cursor() as cursor:
-                    cursor.execute(template.format(source="benchmark.despesas", id=max(1, rows // 2)))
+                    cursor.execute(template.format(source=postgres_source, id=lookup_id))
                     return cursor.fetchall()
-            return con.execute(template.format(source=sources[engine], id=max(1, rows // 2))).fetchall()
+            return con.execute(template.format(source=sources[engine], id=lookup_id)).fetchall()
 
         expected = run("postgres")
         engines = ["postgres", *sources]
@@ -112,107 +117,163 @@ def measure_queries(db, con, sources, repetitions, rows, export_times):
                     raise RuntimeError(f"Resultado divergente: {name}/{engine}")
                 samples[engine].append(elapsed)
         pg_ms = statistics.median(samples["postgres"])
+        with db.cursor() as cursor:
+            cursor.execute("EXPLAIN (FORMAT JSON) " + template.format(source=postgres_source, id=lookup_id))
+            pg_plan = cursor.fetchone()[0]
         for engine in sources:
+            file_format, layout = engine.split("/")
             median = statistics.median(samples[engine])
             results.append({
-                "linhas": rows, "consulta": name, "formato": engine,
+                "linhas": rows, "consulta": name, "formato": file_format, "layout": layout,
                 "postgres_ms": pg_ms, "consulta_ms": median,
                 "aceleracao": pg_ms / median, "exportacao_ms": export_times[engine],
                 "consultas_para_amortizar": break_even(export_times[engine], pg_ms, median),
                 "amostras_postgres_ms": samples["postgres"], "amostras_formato_ms": samples[engine],
+                "linhas_resultado": len(expected), "id_consultado": lookup_id if name == "busca_por_id" else None,
+                "plano_postgres": pg_plan,
+                "plano_duckdb": con.execute("EXPLAIN " + template.format(source=sources[engine], id=lookup_id)).fetchall(),
             })
     return results
 
 
-def run_size(db, con, rows, repetitions, root):
-    print(f"\nGerando {rows:,} despesas sintéticas e índices PostgreSQL...", flush=True)
-    generation_ms, _ = timed(lambda: generate(db, rows))
-    read_ms, data = timed(lambda: con.execute("SELECT * FROM pg.benchmark.despesas ORDER BY id").to_arrow_table())
+def run_size(db, con, rows, repetitions, root, source="synthetic"):
+    postgres_source = "benchmark.despesas" if source == "synthetic" else "oltp.despesas"
+    if source == "synthetic":
+        print(f"\nGerando {rows:,} despesas sintéticas e índices PostgreSQL...", flush=True)
+        generation_ms, _ = timed(lambda: generate(db, rows))
+    else:
+        print("\nLendo despesas REAIS do OLTP, com sessão somente leitura...", flush=True)
+        generation_ms = None
+    read_ms, data = timed(lambda: con.execute(f"SELECT {COLUMNS} FROM pg.{postgres_source} ORDER BY id").to_arrow_table())
+    rows = data.num_rows
+    if not rows:
+        raise ValueError("A origem não contém despesas para medir.")
     folder = root / str(rows)
     folder.mkdir()
-    parquet = folder / "parquet"
-    delta = folder / "delta"
-    iceberg = folder / "iceberg"
-    parquet.mkdir()
-    # Mesma largura e dados nos três formatos. Parquet segue a partição ano/mês do projeto.
     con.register("origem_benchmark", data)
-    parquet_ms, _ = timed(lambda: con.execute(f"""
-        COPY origem_benchmark TO '{parquet.as_posix()}'
-        (FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY(ano, mes), WRITE_PARTITION_COLUMNS true)
-    """))
-    delta_ms, _ = timed(lambda: write_deltalake(delta, data, writer_properties=WriterProperties(compression="ZSTD")))
-    catalog = SqlCatalog("local", uri=f"sqlite:///{folder}/catalogo.db", warehouse=iceberg.as_uri())
-    def write_iceberg():
-        catalog.create_namespace("analytics")
-        table = catalog.create_table("analytics.despesas", schema=data.schema,
-                                     properties={"write.parquet.compression-codec": "zstd"})
-        table.append(data)
-        return table
-    iceberg_ms, table = timed(write_iceberg)
-    sources = {
-        "parquet": f"read_parquet('{parquet}/**/*.parquet', hive_partitioning=true)",
-        "delta": f"delta_scan('{delta}')",
-        "iceberg": f"iceberg_scan('{table.metadata_location}')",
-    }
-    times = {"parquet": read_ms + parquet_ms, "delta": read_ms + delta_ms, "iceberg": read_ms + iceberg_ms}
-    results = measure_queries(db, con, sources, repetitions, rows, times)
+    expected_partitions = con.execute("SELECT count(*) FROM (SELECT DISTINCT ano, mes FROM origem_benchmark)").fetchone()[0]
+    sources, times, storage, writes = {}, {}, {}, []
+    # Todos os seis caminhos são consultados na mesma rodada aleatorizada, com uma
+    # única referência PostgreSQL. Não medimos cada layout em uma sessão separada.
+    combinations = [(fmt, layout) for layout in LAYOUTS for fmt in FORMATS]
+    random.Random(42).shuffle(combinations)
+    for fmt, layout in combinations:
+        key = f"{fmt}/{layout}"
+        path = folder / layout / fmt
+        path.parent.mkdir(parents=True, exist_ok=True)
+        catalog_path = path.parent / "catalogo.db"
+
+        def write():
+            if fmt == "parquet":
+                if layout == "ano_mes":
+                    path.mkdir()
+                    con.execute(f"""COPY origem_benchmark TO '{path}'
+                        (FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY(ano, mes), WRITE_PARTITION_COLUMNS true)""")
+                else:
+                    path.mkdir()
+                    con.execute(f"COPY origem_benchmark TO '{path}/dados.parquet' (FORMAT PARQUET, COMPRESSION ZSTD)")
+                return f"read_parquet('{path}/**/*.parquet', hive_partitioning={'true' if layout == 'ano_mes' else 'false'})"
+            if fmt == "delta":
+                write_deltalake(path, data, partition_by=["ano", "mes"] if layout == "ano_mes" else None,
+                               writer_properties=WriterProperties(compression="ZSTD"))
+                if deltalake.DeltaTable(path).metadata().partition_columns != (["ano", "mes"] if layout == "ano_mes" else []):
+                    raise RuntimeError("Particionamento Delta divergente do solicitado.")
+                return f"delta_scan('{path}')"
+            # Inclui inicialização do catálogo no custo de primeira escrita Iceberg.
+            with closing(SqlCatalog("local", uri=f"sqlite:///{catalog_path}", warehouse=path.as_uri())) as catalog:
+                catalog.create_namespace("analytics")
+                with catalog.create_table_transaction("analytics.despesas", schema=data.schema,
+                        properties={"write.parquet.compression-codec": "zstd"}) as transaction:
+                    if layout == "ano_mes":
+                        with transaction.update_spec() as spec:
+                            spec.add_identity("ano")
+                            spec.add_identity("mes")
+                table = catalog.load_table("analytics.despesas")
+                table.append(data)
+                names = [table.schema().find_field(field.source_id).name for field in table.spec().fields]
+                if names != (["ano", "mes"] if layout == "ano_mes" else []):
+                    raise RuntimeError("Particionamento Iceberg divergente do solicitado.")
+                return f"iceberg_scan('{table.metadata_location}')"
+
+        write_ms, sql_source = timed(write)
+        sources[key] = sql_source
+        times[key] = read_ms + write_ms
+        files = list(path.rglob("*.parquet"))
+        if layout == "ano_mes" and len(files) < expected_partitions:
+            raise RuntimeError(f"{key}: menos arquivos que partições esperadas.")
+        storage[key] = {
+            "formato_bytes": sum(p.stat().st_size for p in path.rglob("*") if p.is_file()),
+            "catalogo_bytes": catalog_path.stat().st_size if fmt == "iceberg" else 0,
+            "arquivos_parquet": len(files),
+            "particoes_esperadas": expected_partitions if layout == "ano_mes" else 0,
+        }
+        writes.append({"formato": fmt, "layout": layout, "escrita_ms": write_ms, **storage[key]})
+        print(f"Escrita {key}: {write_ms:.1f} ms, {len(files)} arquivos Parquet", flush=True)
+    lookup_id = data["id"][rows // 2].as_py()
+    results = measure_queries(db, con, sources, repetitions, rows, times, postgres_source, lookup_id)
     with db.cursor() as cursor:
-        cursor.execute("SELECT pg_total_relation_size('benchmark.despesas')")
+        cursor.execute("SELECT pg_total_relation_size(%s)", (postgres_source,))
         postgres_bytes = cursor.fetchone()[0]
-    sizes = {key: sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
-             for key, path in (("parquet", parquet), ("delta", delta), ("iceberg", iceberg))}
     for result in results:
-        result.update(postgres_bytes=postgres_bytes, formato_bytes=sizes[result["formato"]])
+        result.update(postgres_bytes=postgres_bytes, **storage[f"{result['formato']}/{result['layout']}"])
         payback = result["consultas_para_amortizar"]
-        print(f"{rows:>10,} | {result['consulta']:20} | {result['formato']:7} | "
+        print(f"{rows:>10,} | {result['consulta']:20} | {result['formato']:7}/{result['layout']:12} | "
               f"PG {result['postgres_ms']:9.3f} ms | arquivo {result['consulta_ms']:9.3f} ms | "
               f"{result['aceleracao']:7.2f}x | amortiza: {payback if payback else 'não'}", flush=True)
     con.unregister("origem_benchmark")
-    catalog.close()
     return results, {"linhas": rows, "geracao_e_indices_ms": generation_ms, "leitura_origem_ms": read_ms,
-                     "escrita_parquet_ms": parquet_ms, "escrita_delta_ms": delta_ms, "escrita_iceberg_ms": iceberg_ms}
+                     "escritas": writes}
 
 
-def save_report(output, records, setup, repetitions, db):
+def save_report(output, records, setup, repetitions, db, source="synthetic"):
     with db.cursor() as cursor:
         cursor.execute("SELECT version()")
         postgres_version = cursor.fetchone()[0]
     metadata = {
-        "dados": "sintéticos determinísticos; não são medições da base real do Senado",
+        "versao_experimento": 2,
+        "dados": ("sintéticos determinísticos; não são medições da base real do Senado" if source == "synthetic"
+                  else "reais: todas as linhas de oltp.despesas, sem alterar a origem"),
+        "origem": source,
+        "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "gerado_em": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "sistema": platform.platform(), "cpus_visiveis": os.cpu_count(),
         "postgres": postgres_version, "duckdb": duckdb.__version__,
         "pyarrow": pyarrow.__version__, "deltalake": deltalake.__version__, "pyiceberg": pyiceberg.__version__,
         "repeticoes": repetitions, "cache": "aquecido, ordem alternada com semente 42",
         "comparacao": "PostgreSQL via rede Docker x DuckDB local com arquivos; inclui fetch e índices PG",
-        "layout": "Parquet particionado ano/mes; Delta e Iceberg sem partição; ZSTD nos três",
+        "layouts": list(LAYOUTS),
+        "layout": "Todos sem partição e todos por identidade em ano/mes; ZSTD nos seis caminhos",
+        "referencia_postgres": "Uma amostra PostgreSQL por consulta/repetição, compartilhada pelos dois layouts",
+        "iceberg_exportacao": "Inclui inicialização do catálogo, namespace, tabela, partições e append",
         "amortizacao": "ceil((leitura do PostgreSQL + escrita do formato) / economia por consulta); sem manutenção",
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "resultado.json").write_text(json.dumps({"metadados": metadata, "preparacao": setup,
                                                        "resultados": records}, indent=2, ensure_ascii=False))
-    fields = [key for key in records[0] if not key.startswith("amostras_")]
+    fields = [key for key in records[0] if not key.startswith(("amostras_", "plano_"))]
     with (output / "resultado.csv").open("w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(records)
     lines = ["# Benchmark de escala do lake", "", metadata["dados"], "",
              "Medianas com cache aquecido. Aceleração > 1 significa menor tempo que PostgreSQL.", "",
-             "| Linhas | Consulta | Formato | PostgreSQL ms | Arquivo ms | Aceleração | Consultas para amortizar |",
-             "|---:|---|---|---:|---:|---:|---:|"]
+             "| Linhas | Consulta | Formato | Layout | PostgreSQL ms | Arquivo ms | Aceleração | Consultas para amortizar |",
+             "|---:|---|---|---|---:|---:|---:|---:|"]
     for r in records:
-        lines.append(f"| {r['linhas']} | {r['consulta']} | {r['formato']} | {r['postgres_ms']:.3f} | "
+        lines.append(f"| {r['linhas']} | {r['consulta']} | {r['formato']} | {r['layout']} | {r['postgres_ms']:.3f} | "
                      f"{r['consulta_ms']:.3f} | {r['aceleracao']:.2f}x | {r['consultas_para_amortizar'] or 'não'} |")
     lines.extend(["", "## Primeiro volume observado com vantagem de consulta", ""])
-    for query in QUERIES:
-        winners = [r for r in records if r["consulta"] == query and r["formato"] == "parquet" and r["aceleracao"] > 1]
-        conclusion = f"{min(r['linhas'] for r in winners):,} linhas" if winners else "não encontrado nos volumes testados"
-        message = f"{query}: {conclusion}."
-        lines.append(f"- {message}")
-        print(message, flush=True)
+    for layout in LAYOUTS:
+        for query in QUERIES:
+            winners = [r for r in records if r["consulta"] == query and r["layout"] == layout
+                       and r["formato"] == "parquet" and r["aceleracao"] > 1]
+            conclusion = f"{min(r['linhas'] for r in winners):,} linhas" if winners else "não encontrado nos volumes testados"
+            message = f"{query}/{layout}: {conclusion}."
+            lines.append(f"- {message}")
+            print(message, flush=True)
     lines.extend(["", "Esses pontos são observações, não limiares universais nem garantia de vantagem estável.",
                   "Amortização considera consultas idênticas entre exportações. Atualizações frequentes podem eliminar a vantagem.",
-                  "O experimento não mede concorrência, cache frio, CDC ou custo operacional; a distribuição é sintética.",
+                  "O experimento não mede concorrência, cache frio, CDC ou custo operacional; não extrapole para outras distribuições.",
                   "O tamanho PostgreSQL inclui índices; Iceberg usa catálogo SQLite cujo tamanho não está no tamanho do warehouse.",
                   "Parquet é formato de arquivo; Delta e Iceberg gerenciam tabelas sobre arquivos. DuckDB executa as consultas."])
     (output / "relatorio.md").write_text("\n".join(lines) + "\n")
@@ -224,27 +285,31 @@ def main():
     parser.add_argument("--rows", type=int, nargs="+", default=[10000, 100000, 1000000])
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--output-dir", type=Path, default=Path("/resultados"))
+    parser.add_argument("--source", choices=["synthetic", "oltp"], default="synthetic",
+                        help="oltp mede a base real somente em leitura e ignora --rows")
     args = parser.parse_args()
     if any(rows < 1 for rows in args.rows) or args.repetitions < 3:
         parser.error("Use volumes positivos e pelo menos três repetições.")
-    if os.getenv("ANALYTICS_BENCHMARK_DATABASE") != "1" or DB_NAME != "inflow_benchmark":
+    if args.source == "synthetic" and (os.getenv("ANALYTICS_BENCHMARK_DATABASE") != "1" or DB_NAME != "inflow_benchmark"):
         parser.error("Execute com make benchmark-lake; requer banco exclusivo inflow_benchmark.")
     print("BENCHMARK: PostgreSQL x DuckDB com Parquet, Delta e Iceberg", flush=True)
-    print("Dados sintéticos, cache aquecido; exportação incluída no cálculo de amortização.", flush=True)
+    print(f"Origem: {args.source}; cache aquecido; exportação incluída no cálculo de amortização.", flush=True)
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     output = args.output_dir / stamp
     with closing(psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
                                 user=DB_USER, password=DB_PASSWORD)) as db, closing(connect()) as con:
+        if args.source == "oltp":
+            db.set_session(readonly=True)
         con.load_extension("delta")
         con.load_extension("iceberg")
         records, setup = [], []
         with tempfile.TemporaryDirectory(prefix="inflow_scale_") as temporary:
-            for rows in sorted(set(args.rows)):
-                result, preparation = run_size(db, con, rows, args.repetitions, Path(temporary))
+            for rows in sorted(set(args.rows)) if args.source == "synthetic" else [None]:
+                result, preparation = run_size(db, con, rows, args.repetitions, Path(temporary), args.source)
                 records.extend(result)
                 setup.append(preparation)
                 # Preserva resultados parciais se uma escala maior falhar.
-                save_report(output, records, setup, args.repetitions, db)
+                save_report(output, records, setup, args.repetitions, db, args.source)
 
 
 if __name__ == "__main__":

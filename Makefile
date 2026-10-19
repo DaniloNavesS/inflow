@@ -37,6 +37,7 @@ help:
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
+		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
 		'  make docs             Serve a documentação' \
 		'  make docs-build       Constrói a imagem da documentação' \
 		'  make db-shell         Abre o psql' \
@@ -148,7 +149,11 @@ test-lake:
 
 BENCHMARK_ROWS ?= 10000 100000 1000000
 BENCHMARK_REPETITIONS ?= 5
-.PHONY: benchmark-lake
+.PHONY: benchmark-lake benchmark-lake-real
+benchmark-lake-real: start
+	@mkdir -p resultados/benchmark-lake
+	$(COMPOSE) run --build --rm benchmark-real --source oltp --repetitions $(BENCHMARK_REPETITIONS)
+
 benchmark-lake:
 	@mkdir -p resultados/benchmark-lake
 	@echo 'Benchmark com dados sintéticos e banco descartável. Relatórios em resultados/benchmark-lake/.'
