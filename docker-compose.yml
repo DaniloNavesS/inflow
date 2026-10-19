@@ -22,6 +22,7 @@ services:
       - ./scripts/sql/oltp/012_cnpj_owners.sql:/migrations/012_cnpj_owners.sql:roZ
       - ./scripts/sql/oltp/013_donos_finais.sql:/migrations/013_donos_finais.sql:roZ
       - ./scripts/sql/oltp/014_cdc_publication.sql:/migrations/014_cdc_publication.sql:roZ
+      - ./scripts/sql/oltp/015_janela_despesas.sql:/migrations/015_janela_despesas.sql:roZ
       - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
       - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:
@@ -58,6 +59,7 @@ services:
       RFB_CNPJ_TOKEN: ${RFB_CNPJ_TOKEN:-gn672Ad4CF8N6TK}
       RFB_CNPJ_MONTH: ${RFB_CNPJ_MONTH:-}
       CNPJ_OWNER_MAX_DEPTH: ${CNPJ_OWNER_MAX_DEPTH:-5}
+      LATE_DATA_ALLOWED_MONTHS: ${LATE_DATA_ALLOWED_MONTHS:-2}
       CNPJ_CACHE_DIR: /cache/cnpj
     depends_on:
       postgres:

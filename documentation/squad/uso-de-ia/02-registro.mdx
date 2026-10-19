@@ -8,6 +8,8 @@ sidebar_label: Registro de uso
 | Data | Entrega | Quem | Ferramenta | Finalidade | Artefatos afetados | Como foi verificado |
 |---|---|---|---|---|---|---|
 | 28/09/2026 | E1 | Vilmar Fagundes | Claude Code | Revisão da documentação contra o enunciado da E1|
+| 12/10/2026 | E2 | Victor Camara | Claude Code | Regra de janela e dado atrasado em despesas: DDL, job, testes e página de documentação | `scripts/sql/oltp/015_janela_despesas.sql`, `ingestion/src/jobs/late_data.py`, `tests/test_janela_dado_atrasado.py`, `documentation/docs/metrics/dado-atrasado.mdx` | Testes executados e regra rodada sobre as cargas reais de 2023 a 2025 em PostgreSQL 16 local; falta repetir no ambiente Docker antes do PR |
+| 12/10/2026 | E2 | Victor Camara | Claude Code | ADR 0002: ponderação da recarga agendada, comparação Iceberg x Delta x Parquet puro e script de medição | `documentation/docs/adr/0002-adotamos-cdc-via-debezium-sobre-recarga-periodica.md`, `scripts/adr/0002_formatos_tabela.py` | Script executado três vezes sobre as despesas de 2024 em Windows com PostgreSQL 16 local; falta repetir no ambiente Docker e o squad confirmar a decisão do formato |
 | | | | | | | |
 
 
