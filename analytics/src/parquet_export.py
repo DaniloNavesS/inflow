@@ -5,6 +5,7 @@ recente da empresa na RFB, para que as consultas de gestão não precisem de JOI
 Layout: <lake>/parquet/despesas_enriquecidas/ano=AAAA/mes=M/*.parquet
 """
 import datetime
+import fcntl
 import json
 import logging
 import shutil
@@ -78,7 +79,15 @@ LEFT JOIN empresa em
 
 
 def export_despesas_enriquecidas(con: duckdb.DuckDBPyConnection, lake_dir: Path) -> dict:
-    """Reescreve a tabela inteira; a pasta final só é trocada quando a nova está completa."""
+    """Serializa publicações locais para não misturar duas exportações concorrentes."""
+    root = lake_dir / "parquet"
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / ".export.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _export(con, lake_dir)
+
+
+def _export(con, lake_dir):
     started = time.perf_counter()
     materialized_at = datetime.datetime.now(datetime.timezone.utc)
 
@@ -87,18 +96,27 @@ def export_despesas_enriquecidas(con: duckdb.DuckDBPyConnection, lake_dir: Path)
     staging = root / f".{TABLE}.staging"
     previous = root / f".{TABLE}.previous"
     root.mkdir(parents=True, exist_ok=True)
-    for leftover in (staging, previous):
-        shutil.rmtree(leftover, ignore_errors=True)
+    # Recupera uma execução interrompida entre os dois renames.
+    if previous.exists() and not target.exists():
+        previous.rename(target)
+    shutil.rmtree(staging, ignore_errors=True)
+    shutil.rmtree(previous, ignore_errors=True)
 
     con.execute("CREATE OR REPLACE TEMP TABLE despesas_enriquecidas AS " + QUERY, [materialized_at])
     rows, total = con.execute(
         "SELECT count(*), coalesce(sum(valor), 0) FROM despesas_enriquecidas"
     ).fetchone()
 
-    con.execute(f"""
-        COPY despesas_enriquecidas TO '{staging.as_posix()}'
-        (FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY (ano, mes), WRITE_PARTITION_COLUMNS true)
-    """)
+    staging.mkdir()
+    path = staging.as_posix().replace("'", "''")
+    if rows:
+        con.execute(f"""
+            COPY despesas_enriquecidas TO '{path}'
+            (FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY (ano, mes), WRITE_PARTITION_COLUMNS true)
+        """)
+    else:
+        # Mantém esquema e consultas válidos mesmo quando a origem não tem linhas.
+        con.execute(f"COPY despesas_enriquecidas TO '{path}/empty.parquet' (FORMAT PARQUET, COMPRESSION ZSTD)")
 
     manifest = {
         "tabela": TABLE,
@@ -114,7 +132,12 @@ def export_despesas_enriquecidas(con: duckdb.DuckDBPyConnection, lake_dir: Path)
     # Troca: a versão anterior só sai depois que a nova está no lugar.
     if target.exists():
         target.rename(previous)
-    staging.rename(target)
+    try:
+        staging.rename(target)
+    except OSError:
+        if previous.exists():
+            previous.rename(target)
+        raise
     shutil.rmtree(previous, ignore_errors=True)
 
     partitions = len(list(target.glob("ano=*/mes=*")))

@@ -122,7 +122,7 @@ compressão zstd, aplica um lote de CDC simulado (1 despesa corrigida e 1 nova) 
 DuckDB a agregação senador x tipo de despesa:
 
 ```bash
-docker compose run --rm -v "$PWD/scripts:/scripts:ro" ingestion sh -c 'pip install -q pyarrow deltalake "pyiceberg[sql-sqlite]" duckdb && python /scripts/adr/0002_formatos_tabela.py --ano 2024'
+docker compose run --rm -v "$PWD/scripts:/scripts:ro" ingestion sh -c 'pip install -q -r /scripts/adr/requirements.txt && python /scripts/adr/0002_formatos_tabela.py --ano 2024'
 ```
 
 Resultado para as 21.430 despesas de 2024, com PyArrow 26.0.0, deltalake 1.6.6, PyIceberg
@@ -152,6 +152,43 @@ A tabela acima foi medida em Windows, contra um PostgreSQL 16 local carregado pe
 `expenses`. O mesmo script foi reproduzido em 13/10/2026 no Docker com PostgreSQL 15 e
 21.430 despesas: os três formatos terminaram com 21.431 linhas após o lote, e as versões
 anteriores continuaram legíveis em Delta e Iceberg. Os tempos variaram entre ambientes.
+
+#### Aplicação na camada analítica
+
+A implementação de `make lake` mantém Parquet puro como exportação de despesas enriquecidas
+e referência simples da comparação. Para a tabela mutável `lake/delta/despesas`, escolhemos
+Delta via delta-rs: permite `MERGE` por `id` e leitura de versões anteriores sem exigir um
+catálogo SQL adicional. Iceberg permanece uma alternativa medida pelo experimento, sem
+adicionar um terceiro armazenamento ao pipeline normal.
+
+Essa decisão atende à demonstração de atualização e histórico. Não é uma conclusão de que
+PostgreSQL seja insuficiente para o volume atual, nem de que Parquet/Delta sejam sempre mais
+rápidos. Delta usa Parquet para armazenar dados; a comparação é entre Parquet puro, Parquet
+com log Delta e Parquet com metadados Iceberg.
+
+Validação adicional em Docker/Linux em 18/10/2026, com PostgreSQL 15 e **quatro despesas
+sintéticas de teste** (R$ 331,23). `python main.py lake` comparou os resultados completos de
+duas consultas. Medianas de cinco execuções, incluindo fetch, sem limpeza de caches:
+
+| Consulta | PostgreSQL | DuckDB/Parquet | DuckDB/Delta | Resultados iguais |
+|---|---:|---:|---:|---|
+| Média mensal por senador/ano | 0,310 ms | 3,047 ms | 4,402 ms | sim |
+| Maior categoria por senador/ano | 0,342 ms | 2,992 ms | 4,591 ms | sim |
+
+Nesse cenário pequeno, PostgreSQL foi mais rápido. O tamanho da amostra não permite concluir
+sobre escala, desempenho da carga completa ou superioridade de formato. Repita
+`make ingestion && make lake` para medir a base real; os tempos e resultados ficam em
+`lake/consumo.json`. O cenário descartável pode ser validado com `make test-lake`.
+
+O experimento `0002_formatos_tabela.py` também foi executado nas quatro despesas: todos os
+formatos terminaram com cinco linhas após o lote simulado, agregações equivalentes e versão
+anterior legível em Delta e Iceberg. As dependências desse experimento agora estão fixadas em
+`scripts/adr/requirements.txt`; uma seleção sem despesas encerra com mensagem explícita.
+`--output-dir` permite escolher onde preservar os arquivos; em Docker, monte essa pasta no
+host para que sobreviva a `--rm`.
+
+Consulte o [guia da camada analítica](../camada-analitica.mdx) para semântica das consultas,
+monitoramento e limites. O pipeline lê snapshots completos e ainda não consome Kafka.
 
 ## Decisão
 

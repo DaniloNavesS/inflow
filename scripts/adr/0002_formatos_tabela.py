@@ -3,7 +3,7 @@
 Lê oltp.despesas do PostgreSQL, grava nos três formatos em um diretório temporário, aplica
 um lote de CDC simulado (1 despesa corrigida + 1 nova) e consulta tudo pelo DuckDB.
 
-    pip install pyarrow deltalake "pyiceberg[sql-sqlite]" duckdb psycopg2-binary
+    pip install -r scripts/adr/requirements.txt
     python scripts/adr/0002_formatos_tabela.py --ano 2024
 
 Conexão pelas mesmas variáveis dos testes: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD.
@@ -19,6 +19,7 @@ from pathlib import Path
 import duckdb
 import psycopg2
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from deltalake import DeltaTable, WriterProperties, write_deltalake
 from pyiceberg.catalog.sql import SqlCatalog
@@ -45,9 +46,9 @@ def ler_despesas(ano):
             " WHERE %(ano)s IS NULL OR ano = %(ano)s ORDER BY id",
             {"ano": ano},
         )
-        colunas = list(zip(*cur.fetchall()))
+        registros = cur.fetchall()
     conn.close()
-    return pa.table([pa.array(c, type=f.type) for c, f in zip(colunas, SCHEMA)], schema=SCHEMA)
+    return pa.Table.from_pylist([dict(zip(SCHEMA.names, row)) for row in registros], schema=SCHEMA)
 
 
 def cronometrar(funcao, repeticoes=1):
@@ -68,8 +69,12 @@ def tamanho(pasta):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ano", type=int, default=None)
-    ano = parser.parse_args().ano
+    parser.add_argument("--output-dir", type=Path, help="Pasta onde preservar os arquivos do experimento")
+    args = parser.parse_args()
+    ano = args.ano
     despesas = ler_despesas(ano)
+    if not despesas.num_rows:
+        parser.error(f"Nenhuma despesa encontrada para ano={ano}; carregue o OLTP antes da medição.")
     primeira = despesas.slice(0, 1).to_pylist()[0]
     valor_antigo = primeira["valor"]
     corrigida = {**primeira, "valor": valor_antigo + Decimal("1.23")}
@@ -77,7 +82,9 @@ def main():
     lote_cdc = pa.Table.from_pylist([corrigida, nova], schema=SCHEMA)
     print(f"despesas: {despesas.num_rows} linhas (ano={ano}); lote de CDC: 1 correção + 1 inserção")
 
-    raiz = Path(tempfile.mkdtemp(prefix="adr0002_"))
+    if args.output_dir:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+    raiz = Path(tempfile.mkdtemp(prefix="adr0002_", dir=args.output_dir)).resolve()
     resultados = {}
 
     # Opção nula: um arquivo Parquet; aplicar o lote é reescrever o arquivo inteiro.
@@ -87,7 +94,7 @@ def main():
 
     def reescrever_parquet():
         atual = pq.read_table(parquet)
-        mantidas = atual.filter(pa.compute.invert(pa.compute.is_in(atual["id"], lote_cdc["id"])))
+        mantidas = atual.filter(pc.invert(pc.is_in(atual["id"], lote_cdc["id"])))
         pq.write_table(pa.concat_tables([mantidas, lote_cdc]), parquet, compression="zstd")
 
     apos_escrita = tamanho(parquet.parent)
@@ -134,9 +141,17 @@ def main():
     print("\n| Formato | Escrita inicial (ms) | Arquivos / de dados / kB | Lote de CDC (ms) |"
           " Arquivos / de dados / kB após o lote | Consulta DuckDB (ms) | Linhas | Versão anterior legível |")
     print("|---|---:|---:|---:|---:|---:|---:|---|")
+    expected_table = pa.concat_tables([
+        despesas.filter(pc.invert(pc.is_in(despesas["id"], lote_cdc["id"]))), lote_cdc,
+    ])
+    con.register("esperado", expected_table)
+    esperado = con.execute(CONSULTA.format("esperado")).fetchall()
     for nome, (escrita, antes, lote, depois, fonte, historico) in resultados.items():
-        consulta, _ = cronometrar(lambda: con.execute(CONSULTA.format(fonte)).fetchall(), 5)
+        consulta, resultado = cronometrar(lambda: con.execute(CONSULTA.format(fonte)).fetchall(), 5)
         linhas = con.execute(f"SELECT count(*) FROM {fonte}").fetchone()[0]
+        # Agregações empatadas podem vir em ordens diferentes.
+        if sorted(resultado) != sorted(esperado) or linhas != despesas.num_rows + 1:
+            raise RuntimeError(f"Resultado divergente em {nome} após o lote simulado.")
         print(f"| {nome} | {escrita:.0f} | {antes[0]} / {antes[1]} / {antes[2]:.0f} | {lote:.0f} |"
               f" {depois[0]} / {depois[1]} / {depois[2]:.0f} | {consulta:.1f} | {linhas} | {historico} |")
     print(f"\narquivos em {raiz}")

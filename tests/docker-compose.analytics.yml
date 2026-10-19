@@ -1,0 +1,36 @@
+# Banco e lake descartáveis, sem usar os volumes/dados locais do projeto.
+services:
+  postgres:
+    image: postgres:15-alpine
+    command: [postgres, -c, wal_level=logical]
+    environment:
+      POSTGRES_DB: inflow_test
+      POSTGRES_USER: inflow_test
+      POSTGRES_PASSWORD: inflow_test
+    volumes:
+      - ../scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
+      - ../scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
+      - ../scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U inflow_test -d inflow_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  analytics:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: inflow_test
+      DB_USER: inflow_test
+      DB_PASSWORD: inflow_test
+      LAKE_DIR: /lake
+      ANALYTICS_TEST_DATABASE: "1"
+    volumes:
+      - ../tests:/tests:roZ
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: [pytest, -v, -s, --tb=short, -p, "no:cacheprovider", /tests/analytics]

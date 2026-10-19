@@ -105,3 +105,30 @@ def test_rerun_replaces_the_table_without_leftovers(exported):
     assert second["arquivos"] == first["arquivos"]
     assert not list(path.parent.glob(".*staging")) and not list(path.parent.glob(".*previous"))
     assert con.execute(f"SELECT count(*) FROM {parquet(path)}").fetchone()[0] == first["linhas"]
+
+
+def test_empty_source_still_produces_readable_parquet(tmp_path, monkeypatch):
+    import parquet_export
+    from contextlib import closing
+    monkeypatch.setattr(parquet_export, "QUERY", f"SELECT * FROM ({parquet_export.QUERY}) origem WHERE false")
+    with closing(connect()) as con:
+        result = export_despesas_enriquecidas(con, tmp_path)
+        assert result["linhas"] == 0
+        assert con.execute(f"SELECT count(*) FROM {parquet(tmp_path / 'parquet' / TABLE)}").fetchone()[0] == 0
+
+
+def test_failed_publication_restores_previous_version(tmp_path, monkeypatch):
+    from contextlib import closing
+    from pathlib import Path
+    with closing(connect()) as con:
+        first = export_despesas_enriquecidas(con, tmp_path)
+        rename = Path.rename
+        def interrupted(path, destination):
+            if path.name.endswith(".staging"):
+                raise OSError("Falha simulada na publicação")
+            return rename(path, destination)
+        monkeypatch.setattr(Path, "rename", interrupted)
+        with pytest.raises(OSError, match="simulada"):
+            export_despesas_enriquecidas(con, tmp_path)
+        target = tmp_path / "parquet" / TABLE
+        assert con.execute(f"SELECT count(*) FROM {parquet(target)}").fetchone()[0] == first["linhas"]

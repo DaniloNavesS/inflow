@@ -7,6 +7,7 @@ Uso:
 import argparse
 import logging
 import sys
+from contextlib import closing
 
 import deltalake
 import duckdb
@@ -14,6 +15,7 @@ import duckdb
 from config import LAKE_DIR
 from duck import PG, connect
 from parquet_export import export_despesas_enriquecidas
+from delta_export import export_despesas
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,13 +46,20 @@ def check() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Camada analítica do InFlow")
-    parser.add_argument("command", choices=["check", "parquet"])
+    parser.add_argument("command", choices=["check", "parquet", "delta", "lake"])
     args = parser.parse_args()
 
     if args.command == "check":
         check()
     elif args.command == "parquet":
-        export_despesas_enriquecidas(connect(), LAKE_DIR)
+        with closing(connect()) as con:
+            export_despesas_enriquecidas(con, LAKE_DIR)
+    elif args.command == "delta":
+        with closing(connect()) as con:
+            logger.info("Delta: %s", export_despesas(con, LAKE_DIR))
+    elif args.command == "lake":
+        from pipeline import run_lake
+        run_lake()
 
 
 if __name__ == "__main__":

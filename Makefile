@@ -33,7 +33,10 @@ help:
 		'  make build-analytics  Reconstrói a imagem da camada analítica' \
 		'  make lake-check       Verifica DuckDB, Postgres e a pasta do lake' \
 		'  make lake-parquet     Materializa despesas_enriquecidas em Parquet' \
+		'  make lake             Materializa Parquet/Delta e compara consultas com o PostgreSQL' \
+		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
+		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make docs             Serve a documentação' \
 		'  make docs-build       Constrói a imagem da documentação' \
 		'  make db-shell         Abre o psql' \
@@ -120,14 +123,40 @@ cnpj-test:
 build-analytics:
 	$(COMPOSE) build analytics
 
+.PHONY: lake lake-delta lake-consumption
+lake: start build-analytics
+	$(COMPOSE) run --rm analytics python main.py lake
+
+lake-delta: start build-analytics
+	$(COMPOSE) run --rm analytics python main.py delta
+
+lake-consumption: lake
+
 lake-check: start
 	$(COMPOSE) run --rm analytics python main.py check
 
 lake-parquet: start
 	$(COMPOSE) run --rm analytics python main.py parquet
 
-test-lake: start
-	$(COMPOSE) run --rm analytics pytest -q -p no:cacheprovider /tests/analytics
+test-lake:
+	@echo 'Testes funcionais do lake: nomes dos testes, tempos das consultas e resultado final.'
+	@set -e; \
+	compose='$(COMPOSE) -p inflow-analytics-tests -f tests/docker-compose.analytics.yml'; \
+	trap "$$compose down --volumes --remove-orphans" EXIT; \
+	$$compose up -d --build --wait postgres; \
+	$$compose run --build --rm analytics
+
+BENCHMARK_ROWS ?= 10000 100000 1000000
+BENCHMARK_REPETITIONS ?= 5
+.PHONY: benchmark-lake
+benchmark-lake:
+	@mkdir -p resultados/benchmark-lake
+	@echo 'Benchmark com dados sintéticos e banco descartável. Relatórios em resultados/benchmark-lake/.'
+	@set -e; \
+	compose='$(COMPOSE) -p inflow-lake-benchmark -f tests/docker-compose.benchmark.yml'; \
+	trap "$$compose down --volumes --remove-orphans" EXIT; \
+	$$compose up -d --wait postgres; \
+	$$compose run --build --rm benchmark --rows $(BENCHMARK_ROWS) --repetitions $(BENCHMARK_REPETITIONS)
 
 docs:
 	$(COMPOSE) --profile docs up --build docs
