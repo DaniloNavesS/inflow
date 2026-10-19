@@ -1,0 +1,1634 @@
+{
+  "metadados": {
+    "versao_experimento": 2,
+    "dados": "reais: todas as linhas de oltp.despesas, sem alterar a origem",
+    "origem": "oltp",
+    "script_sha256": "96fe8a4ff77ea447fb8ad606758d0009a5f3549d1b34f32768f0c85f3b39f487",
+    "gerado_em": "2026-10-19T03:39:50.702388+00:00",
+    "sistema": "Linux-7.1.13-200.fc44.x86_64-x86_64-with-glibc2.36",
+    "cpus_visiveis": 12,
+    "postgres": "PostgreSQL 15.17 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "duckdb": "1.5.6",
+    "pyarrow": "26.0.0",
+    "deltalake": "1.6.6",
+    "pyiceberg": "0.12.0",
+    "repeticoes": 7,
+    "cache": "aquecido, ordem alternada com semente 42",
+    "comparacao": "PostgreSQL via rede Docker x DuckDB local com arquivos; inclui fetch e índices PG",
+    "layouts": [
+      "sem_particao",
+      "ano_mes"
+    ],
+    "layout": "Todos sem partição e todos por identidade em ano/mes; ZSTD nos seis caminhos",
+    "referencia_postgres": "Uma amostra PostgreSQL por consulta/repetição, compartilhada pelos dois layouts",
+    "iceberg_exportacao": "Inclui inicialização do catálogo, namespace, tabela, partições e append",
+    "amortizacao": "ceil((leitura do PostgreSQL + escrita do formato) / economia por consulta); sem manutenção"
+  },
+  "preparacao": [
+    {
+      "linhas": 21430,
+      "geracao_e_indices_ms": null,
+      "leitura_origem_ms": 182.61938499927055,
+      "escritas": [
+        {
+          "formato": "parquet",
+          "layout": "ano_mes",
+          "escrita_ms": 33.0460650002351,
+          "formato_bytes": 467544,
+          "catalogo_bytes": 0,
+          "arquivos_parquet": 12,
+          "particoes_esperadas": 12
+        },
+        {
+          "formato": "delta",
+          "layout": "sem_particao",
+          "escrita_ms": 229.3935279994912,
+          "formato_bytes": 462717,
+          "catalogo_bytes": 0,
+          "arquivos_parquet": 1,
+          "particoes_esperadas": 0
+        },
+        {
+          "formato": "iceberg",
+          "layout": "sem_particao",
+          "escrita_ms": 449.1250580031192,
+          "formato_bytes": 467815,
+          "catalogo_bytes": 20480,
+          "arquivos_parquet": 1,
+          "particoes_esperadas": 0
+        },
+        {
+          "formato": "delta",
+          "layout": "ano_mes",
+          "escrita_ms": 16.833528999995906,
+          "formato_bytes": 581665,
+          "catalogo_bytes": 0,
+          "arquivos_parquet": 12,
+          "particoes_esperadas": 12
+        },
+        {
+          "formato": "parquet",
+          "layout": "sem_particao",
+          "escrita_ms": 19.830291999824112,
+          "formato_bytes": 387861,
+          "catalogo_bytes": 0,
+          "arquivos_parquet": 1,
+          "particoes_esperadas": 0
+        },
+        {
+          "formato": "iceberg",
+          "layout": "ano_mes",
+          "escrita_ms": 290.65512599845533,
+          "formato_bytes": 596563,
+          "catalogo_bytes": 20480,
+          "arquivos_parquet": 12,
+          "particoes_esperadas": 12
+        }
+      ]
+    }
+  ],
+  "resultados": [
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "parquet",
+      "layout": "ano_mes",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 5.753120000008494,
+      "aceleracao": 1.85616761044648,
+      "exportacao_ms": 215.66544999950565,
+      "consultas_para_amortizar": 44,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        5.760053001722554,
+        5.753120000008494,
+        4.989756998838857,
+        7.32512200193014,
+        5.42481500087888,
+        5.434272999991663,
+        6.906996000907384
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~22,247 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~22,248 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~22,248 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467544,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "delta",
+      "layout": "sem_particao",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 6.669333000900224,
+      "aceleracao": 1.6011728611521128,
+      "exportacao_ms": 412.01291299876175,
+      "consultas_para_amortizar": 103,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        6.811694001953583,
+        6.669333000900224,
+        6.720510999002727,
+        6.448774001910351,
+        6.682318002276588,
+        6.52903599984711,
+        6.3182859994412865
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 462717,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "iceberg",
+      "layout": "sem_particao",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 6.399701000191271,
+      "aceleracao": 1.6686334256410504,
+      "exportacao_ms": 631.7444430023897,
+      "consultas_para_amortizar": 148,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        6.76711900086957,
+        6.399701000191271,
+        6.873292000818765,
+        6.162680001580156,
+        6.033202000253368,
+        7.4851360004686285,
+        5.86766800188343
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467815,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "delta",
+      "layout": "ano_mes",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 6.62864599871682,
+      "aceleracao": 1.6110009502837868,
+      "exportacao_ms": 199.45291399926646,
+      "consultas_para_amortizar": 50,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        8.615768001618562,
+        6.558362998475786,
+        6.197766000695992,
+        7.062031003442826,
+        6.546669999806909,
+        6.62864599871682,
+        6.755326998245437
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 581665,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "parquet",
+      "layout": "sem_particao",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 4.716146002465393,
+      "aceleracao": 2.264296948704564,
+      "exportacao_ms": 202.44967699909466,
+      "consultas_para_amortizar": 34,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        5.03956099782954,
+        4.963267001585336,
+        4.597070001182146,
+        4.734231002657907,
+        4.527637000137474,
+        4.536274002020946,
+        4.716146002465393
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_decompress_integ│\n│    ral_integer(#0, 22)    │\n│             #1            │\n│             #2            │\n│                           │\n│          ~0 rows          │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_compress_integra│\n│    l_usmallint(#0, 22)    │\n│             #1            │\n│             #2            │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_decompress_integ│\n│    ral_integer(#0, 22)    │\n│             #1            │\n│             #2            │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_compress_integra│\n│    l_usmallint(#0, 22)    │\n│             #1            │\n│             #2            │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 387861,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "agregacao_completa",
+      "formato": "iceberg",
+      "layout": "ano_mes",
+      "postgres_ms": 10.678755003027618,
+      "consulta_ms": 6.768733001081273,
+      "aceleracao": 1.5776593642150958,
+      "exportacao_ms": 473.2745109977259,
+      "consultas_para_amortizar": 122,
+      "amostras_postgres_ms": [
+        10.270867998769972,
+        10.86599100017338,
+        10.698772999603534,
+        10.678755003027618,
+        11.895489999005804,
+        10.342875000787899,
+        10.226293001323938
+      ],
+      "amostras_formato_ms": [
+        7.460699998773634,
+        8.560202000808204,
+        6.185943002492422,
+        6.768733001081273,
+        7.2316139994654804,
+        6.718387001455994,
+        5.784218999906443
+      ],
+      "linhas_resultado": 451,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1714.12,
+            "Total Cost": 1715.88,
+            "Plan Rows": 704,
+            "Plan Width": 121,
+            "Sort Key": [
+              "senador_id",
+              "tipo_despesa"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1672.03,
+                "Total Cost": 1680.83,
+                "Plan Rows": 704,
+                "Plan Width": 121,
+                "Group Key": [
+                  "senador_id",
+                  "tipo_despesa"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Seq Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 0.0,
+                    "Total Cost": 1511.3,
+                    "Plan Rows": 21430,
+                    "Plan Width": 95
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n│      tipo_despesa ASC     │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│          Groups:          │\n│             #0            │\n│             #1            │\n│                           │\n│    Aggregates: sum(#2)    │\n│                           │\n│        ~21,429 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│        tipo_despesa       │\n│           valor           │\n│                           │\n│        ~21,430 rows       │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 596563,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "parquet",
+      "layout": "ano_mes",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 3.0743819988856558,
+      "aceleracao": 0.4787667888205511,
+      "exportacao_ms": 215.66544999950565,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        3.460396001173649,
+        2.9151980015740264,
+        3.0743819988856558,
+        3.001542001584312,
+        3.1871059982222505,
+        3.070603997912258,
+        3.106362000835361
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│         ~769 rows         │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│        ~1,218 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│       File Filters:       │\n│         (mes = 6)         │\n│                           │\n│    Scanning Files: 1/12   │\n│                           │\n│        ~1,218 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467544,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "delta",
+      "layout": "sem_particao",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 5.979691002721665,
+      "aceleracao": 0.24615184907451731,
+      "exportacao_ms": 412.01291299876175,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        6.173871002829401,
+        6.496524998510722,
+        5.548820998228621,
+        5.979691002721665,
+        5.588545998762129,
+        5.313542998919729,
+        6.303086996922502
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│        ~4,286 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│          Filters:         │\n│          ano=2024         │\n│           mes=6           │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 462717,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "iceberg",
+      "layout": "sem_particao",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 3.983430997323012,
+      "aceleracao": 0.3695085965348371,
+      "exportacao_ms": 631.7444430023897,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        4.072380001161946,
+        3.983430997323012,
+        3.941210998164024,
+        3.7338959991757292,
+        3.9147610004874878,
+        5.156003000593046,
+        4.160418000537902
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│        ~4,286 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│          Filters:         │\n│          ano=2024         │\n│           mes=6           │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467815,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "delta",
+      "layout": "ano_mes",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 4.964368999935687,
+      "aceleracao": 0.2964952841404942,
+      "exportacao_ms": 199.45291399926646,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        4.883975998382084,
+        5.230244001722895,
+        4.849600001762155,
+        5.246865999652073,
+        4.964368999935687,
+        5.8386529999552295,
+        4.800557002454298
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│         ~326 rows         │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│         ~360 rows         │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│          Filters:         │\n│          ano=2024         │\n│           mes=6           │\n│                           │\n│         ~360 rows         │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 581665,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "parquet",
+      "layout": "sem_particao",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 2.856505998352077,
+      "aceleracao": 0.5152840561382825,
+      "exportacao_ms": 202.44967699909466,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        2.6415379979880527,
+        2.546967996750027,
+        2.856505998352077,
+        3.4207210010208655,
+        3.5881190015061293,
+        2.7139760022691917,
+        3.0187850024958607
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_decompress_integ│\n│    ral_integer(#0, 22)    │\n│             #1            │\n│                           │\n│          ~0 rows          │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_compress_integra│\n│    l_usmallint(#0, 22)    │\n│             #1            │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_decompress_integ│\n│    ral_integer(#0, 22)    │\n│             #1            │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│        ~4,286 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│__internal_compress_integra│\n│    l_usmallint(#0, 22)    │\n│             #1            │\n│                           │\n│        ~4,286 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│       Filters: mes=6      │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 387861,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "filtro_mensal",
+      "formato": "iceberg",
+      "layout": "ano_mes",
+      "postgres_ms": 1.4719119972141925,
+      "consulta_ms": 3.666108001198154,
+      "aceleracao": 0.4014917173016026,
+      "exportacao_ms": 473.2745109977259,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        1.6478670004289597,
+        1.584906000061892,
+        1.4719119972141925,
+        1.4618420027545653,
+        1.450881998607656,
+        1.584715999342734,
+        1.4503999991575256
+      ],
+      "amostras_formato_ms": [
+        3.5750040005950723,
+        3.710983000928536,
+        4.085906999534927,
+        3.5782499980996363,
+        3.9345389996015,
+        3.666108001198154,
+        3.5624509982881136
+      ],
+      "linhas_resultado": 81,
+      "id_consultado": null,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Sort",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 1443.62,
+            "Total Cost": 1443.84,
+            "Plan Rows": 88,
+            "Plan Width": 36,
+            "Sort Key": [
+              "senador_id"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Aggregate",
+                "Strategy": "Hashed",
+                "Partial Mode": "Simple",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 1439.68,
+                "Total Cost": 1440.78,
+                "Plan Rows": 88,
+                "Plan Width": 36,
+                "Group Key": [
+                  "senador_id"
+                ],
+                "Planned Partitions": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "despesas",
+                    "Alias": "despesas",
+                    "Startup Cost": 38.78,
+                    "Total Cost": 1430.66,
+                    "Plan Rows": 1804,
+                    "Plan Width": 10,
+                    "Recheck Cond": "((ano = 2024) AND (mes = 6))",
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "idx_despesas_ano_mes",
+                        "Startup Cost": 0.0,
+                        "Total Cost": 38.33,
+                        "Plan Rows": 1804,
+                        "Plan Width": 0,
+                        "Index Cond": "((ano = 2024) AND (mes = 6))"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│          ORDER_BY         │\n│    ────────────────────   │\n│       senador_id ASC      │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│       HASH_GROUP_BY       │\n│    ────────────────────   │\n│         Groups: #0        │\n│    Aggregates: sum(#1)    │\n│                           │\n│        ~3,884 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│         PROJECTION        │\n│    ────────────────────   │\n│         senador_id        │\n│           valor           │\n│                           │\n│        ~4,286 rows        │\n└─────────────┬─────────────┘\n┌─────────────┴─────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│         senador_id        │\n│           valor           │\n│                           │\n│          Filters:         │\n│          ano=2024         │\n│           mes=6           │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 596563,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "parquet",
+      "layout": "ano_mes",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 2.5161379999190103,
+      "aceleracao": 0.17104348022861973,
+      "exportacao_ms": 215.66544999950565,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        2.365571999689564,
+        2.535776002332568,
+        2.3607030016137287,
+        2.5161379999190103,
+        2.5875040009850636,
+        2.4423079994448926,
+        2.75961199804442
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~4,449 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467544,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "delta",
+      "layout": "sem_particao",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 5.075649998616427,
+      "aceleracao": 0.08479091354977993,
+      "exportacao_ms": 412.01291299876175,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        4.868707001151051,
+        5.075649998616427,
+        5.046434998803306,
+        5.015405000449391,
+        5.386351000197465,
+        6.413997998606646,
+        5.296731000271393
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 462717,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "iceberg",
+      "layout": "sem_particao",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 3.7417019993881695,
+      "aceleracao": 0.11501958208109532,
+      "exportacao_ms": 631.7444430023897,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        3.432483001233777,
+        3.7520210025832057,
+        3.6449580002226867,
+        4.158134001045255,
+        3.5623299991129898,
+        4.5286999993550126,
+        3.7417019993881695
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 467815,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "delta",
+      "layout": "ano_mes",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 4.531343998678494,
+      "aceleracao": 0.09497601602684268,
+      "exportacao_ms": 199.45291399926646,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        4.283933998522116,
+        4.183421999186976,
+        4.64455999826896,
+        4.73313899783534,
+        4.374896001536399,
+        4.531343998678494,
+        5.241906001174357
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│         DELTA_SCAN        │\n│    ────────────────────   │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~2,455 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 581665,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "parquet",
+      "layout": "sem_particao",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 2.3176709983090404,
+      "aceleracao": 0.1856902901902905,
+      "exportacao_ms": 202.44967699909466,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        2.0821729995077476,
+        2.1086439992359374,
+        2.8640609998547006,
+        2.5640500025474466,
+        2.035674002399901,
+        2.3176709983090404,
+        2.9125029977876693
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│        READ_PARQUET       │\n│    ────────────────────   │\n│         Function:         │\n│        READ_PARQUET       │\n│                           │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 387861,
+      "catalogo_bytes": 0,
+      "arquivos_parquet": 1,
+      "particoes_esperadas": 0
+    },
+    {
+      "linhas": 21430,
+      "consulta": "busca_por_id",
+      "formato": "iceberg",
+      "layout": "ano_mes",
+      "postgres_ms": 0.43036900024162605,
+      "consulta_ms": 2.954072999273194,
+      "aceleracao": 0.14568665037983555,
+      "exportacao_ms": 473.2745109977259,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.43540800106711686,
+        0.5596249975496903,
+        0.3949410020140931,
+        0.416492999647744,
+        0.4175750000285916,
+        0.5159620013728272,
+        0.43036900024162605
+      ],
+      "amostras_formato_ms": [
+        3.1848119979258627,
+        4.9177000000781845,
+        2.9136250013834797,
+        2.931308998086024,
+        2.9744610001216643,
+        2.954072999273194,
+        2.7975739976682235
+      ],
+      "linhas_resultado": 1,
+      "id_consultado": 2232925,
+      "plano_postgres": [
+        {
+          "Plan": {
+            "Node Type": "Index Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "despesas_pkey",
+            "Relation Name": "despesas",
+            "Alias": "despesas",
+            "Startup Cost": 0.29,
+            "Total Cost": 8.3,
+            "Plan Rows": 1,
+            "Plan Width": 119,
+            "Index Cond": "(id = 2232925)"
+          }
+        }
+      ],
+      "plano_duckdb": [
+        [
+          "physical_plan",
+          "┌───────────────────────────┐\n│        ICEBERG_SCAN       │\n│    ────────────────────   │\n│         Function:         │\n│        ICEBERG_SCAN       │\n│                           │\n│        Projections:       │\n│             id            │\n│           valor           │\n│        detalhamento       │\n│                           │\n│    Filters: id=2232925    │\n│                           │\n│        ~4,286 rows        │\n└───────────────────────────┘\n"
+        ]
+      ],
+      "postgres_bytes": 14245888,
+      "formato_bytes": 596563,
+      "catalogo_bytes": 20480,
+      "arquivos_parquet": 12,
+      "particoes_esperadas": 12
+    }
+  ]
+}

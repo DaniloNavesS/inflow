@@ -123,6 +123,20 @@ o total final. Os testes funcionais usam quatro despesas: esses tempos não indi
 
 ## Experimento de escala
 
+A [ADR 0003](./adr/0003-consumo-analitico-duckdb-parquet-e-delta.md) registra a decisão,
+as novas medições da base real de 21.430 despesas e os gráficos que separam os dois layouts
+na base real e na escala sintética.
+
+Para medir a base real sem alterar os registros:
+
+```bash
+make benchmark-lake-real
+```
+
+Esse comando usa todas as linhas atuais de `oltp.despesas`, em sessão somente leitura,
+e cria cópias temporárias dos formatos; não executa a geração sintética nem suas alterações
+de esquema, índices ou estatísticas. O comando abaixo continua reservado ao banco descartável.
+
 ```bash
 make benchmark-lake
 ```
@@ -141,7 +155,7 @@ resultados/benchmark-lake/<data-da-execucao>/
   resultado.json
 ```
 
-O JSON inclui amostras individuais, versões, preparação e tamanhos. O banco e os arquivos
+O JSON inclui amostras individuais, planos `EXPLAIN`, versões, preparação e tamanhos. O banco e os arquivos
 temporários dos formatos são removidos ao final. Para variar a carga:
 
 ```bash
@@ -153,15 +167,25 @@ As consultas têm perfis diferentes:
 | Consulta | O que investiga |
 |---|---|
 | Agregação completa | Ler poucas colunas e agrupar muitos registros |
-| Filtro mensal | Filtrar ano/mês, aproveitando partições Parquet ou índice PostgreSQL |
+| Filtro mensal | Filtrar ano/mês, comparando os três formatos com e sem partição e o índice PostgreSQL |
 | Busca por ID | Acesso pontual, cenário em que a chave primária PostgreSQL pode ser vantajosa |
 
 Os motores são aquecidos antes das medições, a ordem é alternada com semente fixa e são
 reportadas medianas. O PostgreSQL tem chave primária, índices e estatísticas atualizadas.
 O tempo inclui trazer os resultados para Python. A comparação mede o conjunto
 **PostgreSQL via rede Docker** contra **DuckDB com arquivos locais**, não somente o formato.
-Parquet usa partições ano/mês; Delta e Iceberg são escritos sem particionamento, como no
-experimento original da ADR. Não se pode atribuir toda diferença exclusivamente ao formato.
+Na versão 2, **os três formatos são escritos nos dois layouts**: sem partição e por identidade
+em `ano` e `mes`. Os seis caminhos de arquivo e o PostgreSQL são medidos na mesma rodada
+aleatorizada. A referência PostgreSQL é única nos dois layouts. Todos usam ZSTD, mas escritores
+distintos podem escolher tamanhos de arquivo e row groups diferentes. Não se pode atribuir toda
+diferença exclusivamente ao formato. A ADR usa sete repetições; o padrão dos comandos continua
+sendo cinco, configurável por `BENCHMARK_REPETITIONS`.
+
+Particionar não significa criar um índice: é separar arquivos por chaves para permitir
+descartar conjuntos de arquivos. Pode ajudar filtros seletivos e também aumentar o custo
+de abrir muitos arquivos pequenos. A versão atual registra número de arquivos e verifica as
+definições de partição Delta e Iceberg. O custo de exportação Iceberg inclui a inicialização
+do catálogo SQLite, além da tabela e da escrita.
 
 ### O que significa "valer a pena"
 
