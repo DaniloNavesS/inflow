@@ -1,0 +1,29 @@
+# Ambiente exclusivo do benchmark: não conecta ao banco do projeto.
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: inflow_benchmark
+      POSTGRES_USER: inflow_benchmark
+      POSTGRES_PASSWORD: inflow_benchmark
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U inflow_benchmark -d inflow_benchmark"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  benchmark:
+    build:
+      context: ..
+      dockerfile: analytics/benchmark.Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: inflow_benchmark
+      DB_USER: inflow_benchmark
+      DB_PASSWORD: inflow_benchmark
+      ANALYTICS_BENCHMARK_DATABASE: "1"
+    volumes:
+      - ../resultados/benchmark-lake:/resultados:Z
+    depends_on:
+      postgres:
+        condition: service_healthy

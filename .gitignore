@@ -30,6 +30,10 @@ wheels/
 # Docker / Database
 postgres_data/
 
+# Camada analítica: arquivos Parquet/Delta gerados a partir do Postgres
+lake/
+resultados/
+
 # OS / Editor
 .DS_Store
 Thumbs.db

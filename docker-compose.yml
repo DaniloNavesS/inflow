@@ -2,6 +2,14 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: inflow_postgres
+    command:
+      [
+        "postgres",
+        "-c", "wal_level=logical",
+        "-c", "max_replication_slots=10",
+        "-c", "max_wal_senders=10",
+        "-c", "max_slot_wal_keep_size=1GB"
+      ]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
       POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
@@ -13,6 +21,8 @@ services:
       - ./scripts/sql/oltp:/docker-entrypoint-initdb.d:roZ
       - ./scripts/sql/oltp/012_cnpj_owners.sql:/migrations/012_cnpj_owners.sql:roZ
       - ./scripts/sql/oltp/013_donos_finais.sql:/migrations/013_donos_finais.sql:roZ
+      - ./scripts/sql/oltp/014_cdc_publication.sql:/migrations/014_cdc_publication.sql:roZ
+      - ./scripts/sql/oltp/015_janela_despesas.sql:/migrations/015_janela_despesas.sql:roZ
       - ./scripts/sql/monitoring/001_monitoring.sql:/docker-entrypoint-initdb.d/010_monitoring.sql:roZ
       - ./scripts/sql/bronze/001_raw_payloads.sql:/docker-entrypoint-initdb.d/020_bronze.sql:roZ
     healthcheck:
@@ -49,7 +59,49 @@ services:
       RFB_CNPJ_TOKEN: ${RFB_CNPJ_TOKEN:-gn672Ad4CF8N6TK}
       RFB_CNPJ_MONTH: ${RFB_CNPJ_MONTH:-}
       CNPJ_OWNER_MAX_DEPTH: ${CNPJ_OWNER_MAX_DEPTH:-5}
+      LATE_DATA_ALLOWED_MONTHS: ${LATE_DATA_ALLOWED_MONTHS:-2}
       CNPJ_CACHE_DIR: /cache/cnpj
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
+  analytics:
+    container_name: inflow_analytics
+    build:
+      context: .
+      dockerfile: analytics/Dockerfile
+    volumes:
+      - ./lake:/lake
+      - ./tests:/tests:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      LAKE_DIR: /lake
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
+  benchmark-real:
+    profiles: ["benchmark"]
+    build:
+      context: .
+      dockerfile: analytics/benchmark.Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    volumes:
+      - ./resultados/benchmark-lake:/resultados:Z
+    command: ["--source", "oltp"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,11 +118,72 @@ services:
       - "${DOCS_PORT:-3000}:80"
     restart: unless-stopped
 
+  zookeeper:
+    image: debezium/zookeeper:2.7.3.Final
+    container_name: inflow_zookeeper
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    volumes:
+      - zookeeper_data:/zookeeper/data
+      - zookeeper_txns:/zookeeper/txns
+    networks:
+      - inflow_network
+
+  kafka:
+    image: debezium/kafka:2.7.3.Final
+    container_name: inflow_kafka
+    depends_on:
+      - zookeeper
+    environment:
+      ZOOKEEPER_CONNECT: zookeeper:2181
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/kafka/data
+    networks:
+      - inflow_network
+
+  kafka-connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: inflow_kafka_connect
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: inflow_cdc
+      CONFIG_STORAGE_TOPIC: inflow_connect_configs
+      OFFSET_STORAGE_TOPIC: inflow_connect_offsets
+      STATUS_STORAGE_TOPIC: inflow_connect_statuses
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      POSTGRES_DB: ${POSTGRES_DB:-inflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-inflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    ports:
+      - "${KAFKA_CONNECT_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - inflow_network
+
 volumes:
   postgres_data:
     name: inflow_postgres_data
   cnpj_cache:
     name: inflow_cnpj_cache
+  zookeeper_data:
+    name: inflow_zookeeper_data
+  zookeeper_txns:
+    name: inflow_zookeeper_txns
+  kafka_data:
+    name: inflow_kafka_data
 
 networks:
   inflow_network:

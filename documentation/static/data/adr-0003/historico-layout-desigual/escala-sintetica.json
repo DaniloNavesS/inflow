@@ -1,0 +1,748 @@
+{
+  "metadados": {
+    "dados": "sintéticos determinísticos; não são medições da base real do Senado",
+    "gerado_em": "2026-10-19T02:47:57.156354+00:00",
+    "sistema": "Linux-7.1.13-200.fc44.x86_64-x86_64-with-glibc2.36",
+    "cpus_visiveis": 12,
+    "postgres": "PostgreSQL 15.17 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "duckdb": "1.5.6",
+    "pyarrow": "26.0.0",
+    "deltalake": "1.6.6",
+    "pyiceberg": "0.12.0",
+    "repeticoes": 5,
+    "cache": "aquecido, ordem alternada com semente 42",
+    "comparacao": "PostgreSQL via rede Docker x DuckDB local com arquivos; inclui fetch e índices PG",
+    "layout": "Parquet particionado ano/mes; Delta e Iceberg sem partição; ZSTD nos três",
+    "amortizacao": "ceil((leitura do PostgreSQL + escrita do formato) / economia por consulta); sem manutenção"
+  },
+  "preparacao": [
+    {
+      "linhas": 10000,
+      "geracao_e_indices_ms": 1030.707750000147,
+      "leitura_origem_ms": 141.9670799987216,
+      "escrita_parquet_ms": 58.34182900071028,
+      "escrita_delta_ms": 23.965132000739686,
+      "escrita_iceberg_ms": 309.02670599971316
+    },
+    {
+      "linhas": 100000,
+      "geracao_e_indices_ms": 2343.888719999086,
+      "leitura_origem_ms": 145.76931599731324,
+      "escrita_parquet_ms": 202.23915300084627,
+      "escrita_delta_ms": 96.83422099988093,
+      "escrita_iceberg_ms": 232.08025799976895
+    },
+    {
+      "linhas": 1000000,
+      "geracao_e_indices_ms": 31632.289864002814,
+      "leitura_origem_ms": 3667.2544529974402,
+      "escrita_parquet_ms": 1512.417607998941,
+      "escrita_delta_ms": 903.6887709989969,
+      "escrita_iceberg_ms": 2232.555536000291
+    }
+  ],
+  "resultados": [
+    {
+      "linhas": 10000,
+      "consulta": "agregacao_completa",
+      "formato": "parquet",
+      "postgres_ms": 3.669423000246752,
+      "consulta_ms": 10.028788001363864,
+      "aceleracao": 0.3658889787826534,
+      "exportacao_ms": 200.30890899943188,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        3.9583940015290864,
+        3.616924001107691,
+        5.142046000401024,
+        3.669423000246752,
+        3.6643240018747747
+      ],
+      "amostras_formato_ms": [
+        10.88776199685526,
+        10.028788001363864,
+        10.838989001058508,
+        9.79346999884001,
+        9.709980000479845
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 637094
+    },
+    {
+      "linhas": 10000,
+      "consulta": "agregacao_completa",
+      "formato": "delta",
+      "postgres_ms": 3.669423000246752,
+      "consulta_ms": 4.5656290021725,
+      "aceleracao": 0.80370590744467,
+      "exportacao_ms": 165.9322119994613,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        3.9583940015290864,
+        3.616924001107691,
+        5.142046000401024,
+        3.669423000246752,
+        3.6643240018747747
+      ],
+      "amostras_formato_ms": [
+        4.872723999142181,
+        4.388983998069307,
+        4.648727997846436,
+        4.39838100282941,
+        4.5656290021725
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 476596
+    },
+    {
+      "linhas": 10000,
+      "consulta": "agregacao_completa",
+      "formato": "iceberg",
+      "postgres_ms": 3.669423000246752,
+      "consulta_ms": 4.8752990005596075,
+      "aceleracao": 0.7526559909095956,
+      "exportacao_ms": 450.99378599843476,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        3.9583940015290864,
+        3.616924001107691,
+        5.142046000401024,
+        3.669423000246752,
+        3.6643240018747747
+      ],
+      "amostras_formato_ms": [
+        4.8752990005596075,
+        6.184851998114027,
+        4.175777998170815,
+        4.570478002278833,
+        5.585760998656042
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 484866
+    },
+    {
+      "linhas": 10000,
+      "consulta": "filtro_mensal",
+      "formato": "parquet",
+      "postgres_ms": 0.8320439992530737,
+      "consulta_ms": 8.728262000659015,
+      "aceleracao": 0.09532756913005722,
+      "exportacao_ms": 200.30890899943188,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.9048920001077931,
+        0.8167449996108189,
+        0.9377339993079659,
+        0.8320439992530737,
+        0.7755059996270575
+      ],
+      "amostras_formato_ms": [
+        7.263513998623239,
+        9.330548000434646,
+        8.971293998911278,
+        8.728262000659015,
+        8.236746001784923
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 637094
+    },
+    {
+      "linhas": 10000,
+      "consulta": "filtro_mensal",
+      "formato": "delta",
+      "postgres_ms": 0.8320439992530737,
+      "consulta_ms": 5.883778001589235,
+      "aceleracao": 0.141413221067881,
+      "exportacao_ms": 165.9322119994613,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.9048920001077931,
+        0.8167449996108189,
+        0.9377339993079659,
+        0.8320439992530737,
+        0.7755059996270575
+      ],
+      "amostras_formato_ms": [
+        5.815577998873778,
+        6.180031999974744,
+        6.048662999091903,
+        5.883778001589235,
+        5.729093998525059
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 476596
+    },
+    {
+      "linhas": 10000,
+      "consulta": "filtro_mensal",
+      "formato": "iceberg",
+      "postgres_ms": 0.8320439992530737,
+      "consulta_ms": 4.9041240017686505,
+      "aceleracao": 0.16966210457831016,
+      "exportacao_ms": 450.99378599843476,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.9048920001077931,
+        0.8167449996108189,
+        0.9377339993079659,
+        0.8320439992530737,
+        0.7755059996270575
+      ],
+      "amostras_formato_ms": [
+        5.129412002133904,
+        4.9041240017686505,
+        5.841558002430247,
+        4.10760799786658,
+        4.172402001131559
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 484866
+    },
+    {
+      "linhas": 10000,
+      "consulta": "busca_por_id",
+      "formato": "parquet",
+      "postgres_ms": 0.5088189973321278,
+      "consulta_ms": 10.061970999231562,
+      "aceleracao": 0.05056852155218759,
+      "exportacao_ms": 200.30890899943188,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.5088189973321278,
+        0.6212330008565914,
+        0.5147399970155675,
+        0.43915599962929264,
+        0.19517199689289555
+      ],
+      "amostras_formato_ms": [
+        12.964454999746522,
+        10.061970999231562,
+        10.161761001654668,
+        8.707754001079593,
+        9.661709002102725
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 637094
+    },
+    {
+      "linhas": 10000,
+      "consulta": "busca_por_id",
+      "formato": "delta",
+      "postgres_ms": 0.5088189973321278,
+      "consulta_ms": 6.3056309991225135,
+      "aceleracao": 0.08069279623291223,
+      "exportacao_ms": 165.9322119994613,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.5088189973321278,
+        0.6212330008565914,
+        0.5147399970155675,
+        0.43915599962929264,
+        0.19517199689289555
+      ],
+      "amostras_formato_ms": [
+        6.425528998079244,
+        6.998410000960575,
+        6.3056309991225135,
+        6.0919850002392195,
+        6.270234000112396
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 476596
+    },
+    {
+      "linhas": 10000,
+      "consulta": "busca_por_id",
+      "formato": "iceberg",
+      "postgres_ms": 0.5088189973321278,
+      "consulta_ms": 4.563174999930197,
+      "aceleracao": 0.11150547531924836,
+      "exportacao_ms": 450.99378599843476,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.5088189973321278,
+        0.6212330008565914,
+        0.5147399970155675,
+        0.43915599962929264,
+        0.19517199689289555
+      ],
+      "amostras_formato_ms": [
+        4.587400999298552,
+        4.835272000491386,
+        3.7996920000296086,
+        4.3945940014964435,
+        4.563174999930197
+      ],
+      "postgres_bytes": 3055616,
+      "formato_bytes": 484866
+    },
+    {
+      "linhas": 100000,
+      "consulta": "agregacao_completa",
+      "formato": "parquet",
+      "postgres_ms": 28.93419999963953,
+      "consulta_ms": 11.482114001410082,
+      "aceleracao": 2.51993665940664,
+      "exportacao_ms": 348.0084689981595,
+      "consultas_para_amortizar": 20,
+      "amostras_postgres_ms": [
+        28.82383899850538,
+        28.93419999963953,
+        29.077282000798732,
+        29.285677999723703,
+        28.852793999249116
+      ],
+      "amostras_formato_ms": [
+        11.800588999903994,
+        10.910806002357276,
+        11.482114001410082,
+        14.59988699934911,
+        10.892842001339886
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4344570
+    },
+    {
+      "linhas": 100000,
+      "consulta": "agregacao_completa",
+      "formato": "delta",
+      "postgres_ms": 28.93419999963953,
+      "consulta_ms": 9.419408001122065,
+      "aceleracao": 3.0717641699131,
+      "exportacao_ms": 242.60353699719417,
+      "consultas_para_amortizar": 13,
+      "amostras_postgres_ms": [
+        28.82383899850538,
+        28.93419999963953,
+        29.077282000798732,
+        29.285677999723703,
+        28.852793999249116
+      ],
+      "amostras_formato_ms": [
+        9.230717998434557,
+        9.225096997397486,
+        9.482788998866454,
+        10.510554999200394,
+        9.419408001122065
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4321716
+    },
+    {
+      "linhas": 100000,
+      "consulta": "agregacao_completa",
+      "formato": "iceberg",
+      "postgres_ms": 28.93419999963953,
+      "consulta_ms": 9.389210001245374,
+      "aceleracao": 3.081643716116876,
+      "exportacao_ms": 377.8495739970822,
+      "consultas_para_amortizar": 20,
+      "amostras_postgres_ms": [
+        28.82383899850538,
+        28.93419999963953,
+        29.077282000798732,
+        29.285677999723703,
+        28.852793999249116
+      ],
+      "amostras_formato_ms": [
+        10.092379001434892,
+        10.516315000131726,
+        9.244124001270393,
+        9.283818999392679,
+        9.389210001245374
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4415376
+    },
+    {
+      "linhas": 100000,
+      "consulta": "filtro_mensal",
+      "formato": "parquet",
+      "postgres_ms": 2.1688079978048336,
+      "consulta_ms": 7.288262000656687,
+      "aceleracao": 0.29757547102579734,
+      "exportacao_ms": 348.0084689981595,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        2.1259559980535414,
+        2.314604997081915,
+        2.045402998192003,
+        2.247147000161931,
+        2.1688079978048336
+      ],
+      "amostras_formato_ms": [
+        7.383773998299148,
+        7.272741000633687,
+        7.026974002656061,
+        7.288262000656687,
+        8.073055003478657
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4344570
+    },
+    {
+      "linhas": 100000,
+      "consulta": "filtro_mensal",
+      "formato": "delta",
+      "postgres_ms": 2.1688079978048336,
+      "consulta_ms": 7.891770001151599,
+      "aceleracao": 0.27481895664576544,
+      "exportacao_ms": 242.60353699719417,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        2.1259559980535414,
+        2.314604997081915,
+        2.045402998192003,
+        2.247147000161931,
+        2.1688079978048336
+      ],
+      "amostras_formato_ms": [
+        7.891770001151599,
+        7.995005998964189,
+        8.245783999882406,
+        7.00638499984052,
+        6.776256999728503
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4321716
+    },
+    {
+      "linhas": 100000,
+      "consulta": "filtro_mensal",
+      "formato": "iceberg",
+      "postgres_ms": 2.1688079978048336,
+      "consulta_ms": 5.772776999947382,
+      "aceleracao": 0.3756957869366168,
+      "exportacao_ms": 377.8495739970822,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        2.1259559980535414,
+        2.314604997081915,
+        2.045402998192003,
+        2.247147000161931,
+        2.1688079978048336
+      ],
+      "amostras_formato_ms": [
+        5.965714997728355,
+        5.551045000174781,
+        5.99779500043951,
+        5.772776999947382,
+        5.297312000038801
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4415376
+    },
+    {
+      "linhas": 100000,
+      "consulta": "busca_por_id",
+      "formato": "parquet",
+      "postgres_ms": 0.4249890007486101,
+      "consulta_ms": 9.198677002132172,
+      "aceleracao": 0.04620110051153024,
+      "exportacao_ms": 348.0084689981595,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.38671599759254605,
+        0.4949219983245712,
+        0.4249890007486101,
+        0.4565389972412959,
+        0.1823979982873425
+      ],
+      "amostras_formato_ms": [
+        9.405169999809004,
+        9.603828999388497,
+        8.963911001046654,
+        9.198677002132172,
+        8.455953000520822
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4344570
+    },
+    {
+      "linhas": 100000,
+      "consulta": "busca_por_id",
+      "formato": "delta",
+      "postgres_ms": 0.4249890007486101,
+      "consulta_ms": 11.160211000969866,
+      "aceleracao": 0.03808073169151344,
+      "exportacao_ms": 242.60353699719417,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.38671599759254605,
+        0.4949219983245712,
+        0.4249890007486101,
+        0.4565389972412959,
+        0.1823979982873425
+      ],
+      "amostras_formato_ms": [
+        17.490949998318683,
+        12.355775998003082,
+        9.773371002665954,
+        11.160211000969866,
+        10.637285002303543
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4321716
+    },
+    {
+      "linhas": 100000,
+      "consulta": "busca_por_id",
+      "formato": "iceberg",
+      "postgres_ms": 0.4249890007486101,
+      "consulta_ms": 9.613938000256894,
+      "aceleracao": 0.04420550670674743,
+      "exportacao_ms": 377.8495739970822,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.38671599759254605,
+        0.4949219983245712,
+        0.4249890007486101,
+        0.4565389972412959,
+        0.1823979982873425
+      ],
+      "amostras_formato_ms": [
+        15.622121998603689,
+        13.49806099824491,
+        9.186684001178946,
+        9.307734999310924,
+        9.613938000256894
+      ],
+      "postgres_bytes": 25788416,
+      "formato_bytes": 4415376
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "agregacao_completa",
+      "formato": "parquet",
+      "postgres_ms": 133.11835799686378,
+      "consulta_ms": 17.799897999793757,
+      "aceleracao": 7.478602293024723,
+      "exportacao_ms": 5179.672060996381,
+      "consultas_para_amortizar": 45,
+      "amostras_postgres_ms": [
+        133.11835799686378,
+        127.57541899918579,
+        140.84180799909518,
+        139.51195700065,
+        130.44352699944284
+      ],
+      "amostras_formato_ms": [
+        17.799897999793757,
+        17.76692500061472,
+        17.316718000074616,
+        17.87407899973914,
+        18.511933001718717
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 41422267
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "agregacao_completa",
+      "formato": "delta",
+      "postgres_ms": 133.11835799686378,
+      "consulta_ms": 47.475298000790644,
+      "aceleracao": 2.803949919274795,
+      "exportacao_ms": 4570.943223996437,
+      "consultas_para_amortizar": 54,
+      "amostras_postgres_ms": [
+        133.11835799686378,
+        127.57541899918579,
+        140.84180799909518,
+        139.51195700065,
+        130.44352699944284
+      ],
+      "amostras_formato_ms": [
+        55.370083999150665,
+        46.68538399710087,
+        47.475298000790644,
+        45.655965001060395,
+        53.05577900071512
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 38391895
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "agregacao_completa",
+      "formato": "iceberg",
+      "postgres_ms": 133.11835799686378,
+      "consulta_ms": 52.76920399774099,
+      "aceleracao": 2.522652378886793,
+      "exportacao_ms": 5899.809988997731,
+      "consultas_para_amortizar": 74,
+      "amostras_postgres_ms": [
+        133.11835799686378,
+        127.57541899918579,
+        140.84180799909518,
+        139.51195700065,
+        130.44352699944284
+      ],
+      "amostras_formato_ms": [
+        50.50926200055983,
+        60.802232001151424,
+        57.48776399923372,
+        49.71768500035978,
+        52.76920399774099
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 39110165
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "filtro_mensal",
+      "formato": "parquet",
+      "postgres_ms": 17.516146999696502,
+      "consulta_ms": 8.77275700258906,
+      "aceleracao": 1.9966524770408036,
+      "exportacao_ms": 5179.672060996381,
+      "consultas_para_amortizar": 593,
+      "amostras_postgres_ms": [
+        17.681302000710275,
+        17.516146999696502,
+        16.28689800054417,
+        16.15959499758901,
+        19.08705700043356
+      ],
+      "amostras_formato_ms": [
+        8.800370000244584,
+        8.997554999950808,
+        8.77275700258906,
+        7.841504997486481,
+        7.918691000668332
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 41422267
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "filtro_mensal",
+      "formato": "delta",
+      "postgres_ms": 17.516146999696502,
+      "consulta_ms": 25.83287699962966,
+      "aceleracao": 0.6780563775357895,
+      "exportacao_ms": 4570.943223996437,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        17.681302000710275,
+        17.516146999696502,
+        16.28689800054417,
+        16.15959499758901,
+        19.08705700043356
+      ],
+      "amostras_formato_ms": [
+        25.849277997622266,
+        24.26193700011936,
+        22.652753999864217,
+        25.83287699962966,
+        26.722921000327915
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 38391895
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "filtro_mensal",
+      "formato": "iceberg",
+      "postgres_ms": 17.516146999696502,
+      "consulta_ms": 23.762265998811927,
+      "aceleracao": 0.7371412726619709,
+      "exportacao_ms": 5899.809988997731,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        17.681302000710275,
+        17.516146999696502,
+        16.28689800054417,
+        16.15959499758901,
+        19.08705700043356
+      ],
+      "amostras_formato_ms": [
+        22.023566001735162,
+        23.762265998811927,
+        23.701549998804694,
+        30.45085600024322,
+        28.55285299665411
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 39110165
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "busca_por_id",
+      "formato": "parquet",
+      "postgres_ms": 0.46384300003410317,
+      "consulta_ms": 10.918600000877632,
+      "aceleracao": 0.04248191160009705,
+      "exportacao_ms": 5179.672060996381,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.4583119989547413,
+        0.46384300003410317,
+        0.7051920001686085,
+        0.5867270010639913,
+        0.3620489987952169
+      ],
+      "amostras_formato_ms": [
+        11.018320998118725,
+        10.918600000877632,
+        10.542715001065517,
+        11.319324003125075,
+        10.585708001599414
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 41422267
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "busca_por_id",
+      "formato": "delta",
+      "postgres_ms": 0.46384300003410317,
+      "consulta_ms": 47.97028899702127,
+      "aceleracao": 0.009669380980025066,
+      "exportacao_ms": 4570.943223996437,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.4583119989547413,
+        0.46384300003410317,
+        0.7051920001686085,
+        0.5867270010639913,
+        0.3620489987952169
+      ],
+      "amostras_formato_ms": [
+        47.57234299904667,
+        45.94574600196211,
+        47.97028899702127,
+        49.14334200293524,
+        48.484117000043625
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 38391895
+    },
+    {
+      "linhas": 1000000,
+      "consulta": "busca_por_id",
+      "formato": "iceberg",
+      "postgres_ms": 0.46384300003410317,
+      "consulta_ms": 46.88950299896533,
+      "aceleracao": 0.009892256696436693,
+      "exportacao_ms": 5899.809988997731,
+      "consultas_para_amortizar": null,
+      "amostras_postgres_ms": [
+        0.4583119989547413,
+        0.46384300003410317,
+        0.7051920001686085,
+        0.5867270010639913,
+        0.3620489987952169
+      ],
+      "amostras_formato_ms": [
+        47.120170998823596,
+        46.34734099818161,
+        46.5020049996383,
+        48.586011998850154,
+        46.88950299896533
+      ],
+      "postgres_bytes": 244588544,
+      "formato_bytes": 39110165
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+services:
+  postgres:
+    container_name: inflow_test_postgres
+    ports: !override []
+  ingestion:
+    container_name: inflow_test_ingestion
+    environment:
+      ENABLE_CNPJ_OWNERS: "0"
+  docs:
+    container_name: inflow_test_docs
+  zookeeper:
+    container_name: inflow_test_zookeeper
+  kafka:
+    container_name: inflow_test_kafka
+  kafka-connect:
+    container_name: inflow_test_kafka_connect
+
+volumes:
+  postgres_data:
+    name: inflow_test_postgres_data
+  cnpj_cache:
+    name: inflow_test_cnpj_cache
+  zookeeper_data:
+    name: inflow_test_zookeeper_data
+  zookeeper_txns:
+    name: inflow_test_zookeeper_txns
+  kafka_data:
+    name: inflow_test_kafka_data
+
+networks:
+  inflow_network:
+    name: inflow_test_network

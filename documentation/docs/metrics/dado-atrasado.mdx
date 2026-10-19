@@ -1,0 +1,182 @@
+---
+sidebar_position: 5
+title: Dado atrasado em despesas
+description: Regra de janela mensal, watermark e tratamento de dado atrasado nas despesas da CEAPS, com a medição que a justifica e o teste que mostra o comportamento.
+---
+
+# Dado atrasado em despesas
+
+Uma despesa da CEAPS tem dois tempos. O **tempo de evento** é `data_despesa`, a data do
+documento fiscal. O **tempo de chegada** é quando a origem publica o lançamento, o que ela faz
+agrupando por competência (`ano`, `mes`). Os dois não andam juntos: uma nota de março pode ser
+lançada na competência de julho. Quem soma "gasto por senador e mês" precisa decidir o que
+acontece quando essa nota chega depois que o mês de março já foi fechado e divulgado.
+
+## Medição
+
+A origem não informa a data de publicação de cada lançamento, e `timestamp_ingestao` é igual
+para todas as linhas de uma mesma carga. A melhor aproximação disponível do atraso é a
+**defasagem**: meses entre a competência do lançamento e o mês do documento.
+
+```sql
+WITH d AS (
+    SELECT ano,
+           (ano * 12 + mes)
+           - (extract(year FROM data_despesa)::int * 12
+              + extract(month FROM data_despesa)::int) AS defasagem
+    FROM oltp.despesas
+    WHERE data_despesa >= DATE '2000-01-01'
+)
+SELECT ano, count(*) AS validas,
+       round(100.0 * count(*) FILTER (WHERE defasagem <= 0) / count(*), 2) AS ate_0,
+       round(100.0 * count(*) FILTER (WHERE defasagem <= 1) / count(*), 2) AS ate_1,
+       round(100.0 * count(*) FILTER (WHERE defasagem <= 2) / count(*), 2) AS ate_2,
+       round(100.0 * count(*) FILTER (WHERE defasagem <= 3) / count(*), 2) AS ate_3,
+       count(*) FILTER (WHERE defasagem > 2) AS acima_de_2
+FROM d GROUP BY ano ORDER BY ano;
+```
+
+Resultado com as cargas de 2023, 2024 e 2025 (medição de 12/10/2026):
+
+| Competência | Lançamentos com data válida | até 0 meses | até 1 mês | até 2 meses | até 3 meses | acima de 2 meses |
+|---|---:|---:|---:|---:|---:|---:|
+| 2023 | 18.817 | 84,95% | 96,32% | 99,28% | 99,47% | 136 |
+| 2024 | 21.426 | 94,43% | 98,21% | 99,30% | 99,44% | 150 |
+| 2025 | 23.807 | 95,73% | 98,87% | 99,19% | 99,38% | 193 |
+
+Dois meses cobrem pelo menos 99,19% dos lançamentos nos três anos. O terceiro mês acrescenta
+menos de 0,2 ponto percentual e atrasaria em um mês o fechamento de todas as janelas. A cauda
+restante é longa e inclui erros de digitação no ano do documento, que nenhum prazo razoável
+alcançaria.
+
+Outras 10 linhas (5, 4 e 1 por ano) têm data anterior a 2000, como `0202-07-04`; é o mesmo
+problema já registrado em [Caracterização da carga](./workload.md#qualidade-do-dado-na-origem).
+
+## Regra
+
+| Elemento | Definição |
+|---|---|
+| Tempo de evento | `data_despesa`, quando está entre `2000-01-01` e o fim da competência (`ano`, `mes`). Fora desse intervalo, vale o primeiro dia da competência e o lançamento fica marcado com `origem_tempo_evento = 'COMPETENCIA'` |
+| Janela | fixa, de um mês civil: do dia 1 ao dia 1 do mês seguinte, por senador |
+| Watermark | primeiro dia do mês da maior competência já vista, menos o atraso permitido. Não avança com lote vazio e nunca recua |
+| Atraso permitido | 2 meses (`LATE_DATA_ALLOWED_MONTHS`) |
+| Janela fechada | aquela cujo fim é menor ou igual ao watermark |
+| Lote | cada execução do job. O watermark que classifica um lote é o que os lotes anteriores deixaram; ele só avança no fim do lote |
+
+O relógio do watermark é a competência, e não `data_despesa`, por robustez: a competência é
+validada pela origem e pelas restrições do esquema, enquanto a data do documento é digitada. Na
+carga de 2025 há documentos datados de dezembro de 2026; se o watermark seguisse a maior
+`data_despesa`, um único erro desses fecharia todas as janelas abertas.
+
+O que acontece com cada lançamento:
+
+| Situação | Classificação | Efeito |
+|---|---|---|
+| Despesa nova em janela aberta | `NO_PRAZO` | soma em `total_no_prazo` da janela |
+| Despesa nova em janela fechada | `ATRASADO` | `total_no_prazo` não muda; o valor aparece em `ajuste_tardio` |
+| Correção de despesa em janela aberta | `NO_PRAZO` | estorno do valor antigo e lançamento do novo; `total_no_prazo` é revisado |
+| Correção de despesa em janela fechada | `ATRASADO` | estorno e novo lançamento vão para `ajuste_tardio` |
+| Reexecução sem mudança na origem | nenhuma | nenhum lançamento é gerado |
+
+O dado atrasado **não é descartado**. Descartar esconderia gasto público; reabrir a janela
+mudaria um número que já foi divulgado. A regra mantém as duas leituras lado a lado:
+`total_no_prazo` é o valor do fechamento e não muda depois que a janela fecha,
+`ajuste_tardio` é o que chegou depois, e `total_revisado` é a soma dos dois, sempre igual ao que
+está em `oltp.despesas`.
+
+## Implementação
+
+- `scripts/sql/oltp/015_janela_despesas.sql` cria o schema `analytics` com
+  `janela_controle` (watermark por fluxo), `janela_despesas_estado` (o que cada despesa
+  contribui hoje), `janela_despesas_lancamentos` (razão somente de inserção, um delta por
+  linha) e a visão `vw_despesas_janela_mensal`.
+- `ingestion/src/jobs/late_data.py` processa um lote: compara `oltp.despesas` com o estado,
+  gera os lançamentos das despesas novas ou corrigidas e avança o watermark. Roda como o job
+  `expense_windows`, logo depois da carga da CEAPS em `make ingestion`.
+
+```bash
+make janela          # processa um lote sem refazer a carga
+make janela-reset    # apaga o fluxo e reprocessa tudo como um único lote
+```
+
+```sql
+-- Janelas de um senador, com o fechamento separado do ajuste tardio
+SELECT janela_inicio, situacao, total_no_prazo, ajuste_tardio, total_revisado
+FROM analytics.vw_despesas_janela_mensal
+WHERE fluxo = 'despesas' AND senador_id = 5936
+ORDER BY janela_inicio;
+
+-- Saída lateral: tudo o que chegou com a janela já fechada
+SELECT lote, despesa_id, janela_inicio, delta_valor, motivo, watermark_no_lote
+FROM analytics.janela_despesas_lancamentos
+WHERE fluxo = 'despesas' AND classificacao = 'ATRASADO'
+ORDER BY lote, janela_inicio;
+```
+
+## Teste
+
+`tests/test_janela_dado_atrasado.py` monta uma fonte sintética em tabela temporária, com fluxo
+próprio, dentro de uma transação desfeita no final. Não depende das despesas reais.
+
+```bash
+make janela-test
+```
+
+Cenário principal, com um senador, despesas de R$ 100 e atraso permitido de 2 meses:
+
+| Lote | O que chega | Classificação | Janela de janeiro | Watermark ao fim |
+|---|---|---|---|---|
+| 1 | despesas de jan, fev, mar e abr (competências jan a abr) | 4 `NO_PRAZO` | no prazo 100, ajuste 0 | `2024-02-01`: janeiro fecha |
+| 2 | despesa de 20/03 e despesa de 15/01, ambas na competência de maio | 1 `NO_PRAZO`, 1 `ATRASADO` | no prazo 100, ajuste 100 | `2024-03-01`: fevereiro fecha |
+| 3 | correções de valor: despesa de janeiro vai a 130, despesa de abril vai a 150 | 2 `NO_PRAZO`, 2 `ATRASADO` | no prazo 100, ajuste 130 | `2024-03-01` |
+
+Os 13 testes cobrem ainda: lote vazio não avança o watermark; reexecução sem mudança não gera lançamento; `total_revisado` bate
+com a origem mesmo quando uma correção muda a despesa de janela; o watermark não recua com
+competência antiga; data inválida ou futura usa a competência como janela; reiniciar o fluxo
+reprocessa tudo como um único lote.
+
+## Comportamento com os dados reais
+
+Carga de 2023, 2024 e 2025, nessa ordem, com o job de janelas depois de cada ano:
+
+```bash
+make clean && make start
+for ano in 2023 2024 2025; do
+  docker compose run --rm -e INGESTION_YEAR=$ano -e ENABLE_CNPJ_OWNERS=0 ingestion
+done
+```
+
+| Lote | Despesas novas | `NO_PRAZO` | `ATRASADO` | Valor atrasado | Watermark ao fim |
+|---|---:|---:|---:|---:|---|
+| 2023 | 18.822 | 18.822 | 0 | 0 | `2023-10-01` |
+| 2024 | 21.430 | 21.400 | 30 | R$ 44.858,94 | `2024-10-01` |
+| 2025 | 23.808 | 23.746 | 62 | R$ 49.700,82 | `2025-10-01` |
+
+Ao fim, a soma dos lançamentos é R$ 98.828.894,86, igual a `sum(valor)` das 64.060 linhas de
+`oltp.despesas`. Reexecutar o job depois de cada carga gerou zero lançamentos.
+
+O número de atrasados aqui (30 e 62) é menor que a cauda da medição (150 e 193) porque cada
+lote carrega um ano inteiro de uma vez: só aparece como atrasado o que cruza de um ano para o
+outro. Em operação diária, o lote é o que a origem publicou desde a véspera, e a classificação
+se aproxima da defasagem medida.
+
+Esses números foram obtidos com os jobs `expenses` e `expense_windows` do projeto em um
+PostgreSQL 16 local. A validação de 19/10/2026 repetiu a sequência no Docker com a carga de
+2024: 21.431 lançamentos `NO_PRAZO`, watermark `2024-10-01` e soma dos lançamentos igual a
+`sum(valor)` de `oltp.despesas`. Os totais mudam quando a fonte publica novos lançamentos.
+
+## Limitações
+
+- **Ordem da carga histórica.** Carregar um ano mais antigo depois de um mais novo classifica
+  o ano antigo inteiro como `ATRASADO`, o que é a regra funcionando. Carregue em ordem
+  crescente ou use `make janela-reset` ao final.
+- **Reiniciar muda a classificação.** No reprocessamento tudo chega em um único lote e entra
+  como `NO_PRAZO`; a informação de quem chegou atrasado só existe no razão original.
+  `total_revisado` é o mesmo nos dois casos.
+- **Granularidade do lote.** Dentro de um lote não há ordem de chegada. Duas despesas do mesmo
+  lote são classificadas contra o mesmo watermark.
+- **Exclusão na origem.** O ingestor nunca apaga despesas, então a regra não trata `DELETE`.
+- **Presença.** Em `registro_presenca` o tempo de evento seria `sessao_plenaria.data_sessao` e
+  a chegada, `documento_dsf.data_publicacao`; nas três sessões da prova de viabilidade o DSF saiu
+  no dia seguinte. A regra não foi aplicada ali porque três sessões não permitem medir um
+  atraso permitido.
