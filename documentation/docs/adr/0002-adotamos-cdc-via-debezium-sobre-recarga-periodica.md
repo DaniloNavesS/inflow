@@ -1,7 +1,7 @@
 # 0002 — Adotamos CDC via Debezium sobre recarga periódica e Delta Lake (delta-rs) como formato de tabela
 
-- **Status:** aceita para a captura de mudanças; proposta para o formato de tabela, até a
-  revisão de quem implementa a camada analítica
+- **Status:** aceita para a captura de mudanças e para o formato de tabela (Delta via delta-rs);
+  o particionamento do lake é tratado na ADR 0003
 - **Data:** 2026-10-12
 - **Decisores:** Squad InFlow
 
@@ -18,7 +18,7 @@ que a cópia agendada resolve:
 - a origem publica o CEAPS mensalmente e o frescor tolerado é de 1 mês;
 - a carga completa grava cerca de 34 mil linhas em 90,6 s, contra 10 min tolerados;
 - há um único escritor em lote e poucos leitores analíticos;
-- `despesas` tem 21.430 linhas por ano, e a agregação mais pesada leva 12,0 ms.
+- `despesas` tem 21.430 linhas em 2024, e a agregação mais pesada leva 12,0 ms.
 
 A origem também não oferece um fluxo de mudanças: o Postgres só muda quando o lote diário
 roda. Capturar o WAL, portanto, **não deixa o dado mais fresco**. O que a cópia agendada não
