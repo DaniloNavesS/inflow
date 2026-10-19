@@ -13,7 +13,7 @@ sidebar_label: Diário de bordo (E2)
 
 Registro da **E2 — Ingestão em lote e captura de mudanças**, considerando o trabalho posterior à [Release 1 revisada — R1-revisada](https://github.com/DaniloNavesS/inflow/releases/tag/R1-revisada), publicada em **06/10/2026**.
 
-O levantamento considera os 41 commits, incluindo integrações, presentes na comparação entre a release e a `develop` até o commit `1039baa5cd7be9b8680ca2222d19ed694404f692`.
+O levantamento considera os 43 commits, incluindo integrações, presentes na comparação entre a release e a `develop` até o commit `7c0f3c2634446df2c6536128dbfb739e9a8643ec`.
 
 O [enunciado da E2](https://github.com/UnB-BD2/PlanoEnsino/blob/main/_entregas/e2.md) orienta a implementação de carga em lote idempotente, captura de mudanças, armazenamento em formato aberto, demonstração de replay, tratamento de dados atrasados e registro das decisões arquiteturais.
 
@@ -123,8 +123,36 @@ Os resultados correspondem às execuções e suítes descritas em cada PR.
 - [PR #28 — documentação de CDC, replay e diário](https://github.com/DaniloNavesS/inflow/pull/28)
 - [PR #29 — camada analítica](https://github.com/DaniloNavesS/inflow/pull/29)
 
+## Validação final — 19/10/2026
+
+Reexecução no Docker Desktop (PostgreSQL 15) sobre o commit `7c0f3c2`, para conferir as
+evidências dos PRs:
+
+| Comando | Resultado |
+|---|---|
+| `make test` | 53 testes aprovados e 10 ignorados; `make cnpj-test` com 12 aprovados |
+| `make janela-test` | 13 testes aprovados (regra de dado atrasado) |
+| `make cdc-test` | 1 aprovado em 0,85 s; conector Debezium `RUNNING` |
+| `make cdc-semantics` | 1 aprovado em 12,69 s (replay e deduplicação) |
+| `make test-lake` | 20 testes aprovados (Parquet/Delta em banco descartável) |
+| `make ingestion` (2024) | 21.431 despesas e 3.516 fornecedores; R$ 32.290.271,35 |
+| `make lake` | Parquet e Delta materializados; consultas iguais ao PostgreSQL |
+| `make benchmark-lake-real BENCHMARK_REPETITIONS=3` | base real medida sem alterar `oltp.despesas` |
+
+O job `expense_windows` classificou os 21.431 lançamentos como `NO_PRAZO`, com watermark
+`2024-10-01` e soma igual a `sum(valor)` de `oltp.despesas`.
+
+Na validação, a API do CEAPS devolveu **21.431** despesas de 2024, uma a mais que as 21.430
+registradas nas medições dos PRs e nos ADRs. Os números dos ADRs permanecem como foram medidos;
+a diferença apenas mostra que a fonte publica lançamentos novos com o tempo.
+
+Riscos que continuam abertos e estão registrados nos ADRs: não há consumidor levando os eventos
+do Kafka para a camada Delta; a camada analítica lê snapshots completos do PostgreSQL; a
+semântica de entrega demonstrada é *at-least-once* com deduplicação em memória, não
+*exactly-once* ponta a ponta; e a integração à `main` ainda não foi feita.
+
 ## Continuidade
 
 A E2 reúne captura de mudanças, replay, tratamento de atrasos e armazenamento analítico aberto. Nesta versão, a camada analítica usa snapshots completos, enquanto o CDC é validado no tópico e no consumidor de teste. A conexão direta entre essas frentes pode ser evoluída nas próximas etapas.
 
-A integração à `main` e os resultados da validação final poderão ser acrescentados ao diário conforme o fechamento da entrega.
+A integração à `main` e a publicação da release da E2 permanecem como próximos passos.
