@@ -1,8 +1,9 @@
-# 0003: Adotamos DuckDB com Deltalake
+# 0003: Adotamos DuckDB com Parquet e Delta e escolhemos o particionamento por medições equivalentes
 
 - **Status:** aceito
 - **Data:** 2026-10-19
 - **Decisores:** Squad InFlow
+
 ## Contexto
 
 Precisamos decidir como consumir a cópia analítica das despesas da CEAPS e quando separar
@@ -266,9 +267,10 @@ linhas (cerca de 1,06×) exige novas sessões antes de ser tratado como vantagem
 
 Para a carga real atual, o layout **sem partição é o candidato preferido quando o critério
 é tempo de leitura**: a separação por ano/mês não mostrou vantagem em Parquet. A exportação
-operacional atual ainda usa ano/mês; esta ADR permanece proposta e não reconfigura esse
-exportador. Uma alteração operacional deve preservar os testes e medir também os JOINs
-de enriquecimento, cujo custo não está nesta projeção de 11 colunas.
+operacional continua usando ano/mês, e esta ADR mantém esse layout nesta etapa porque a
+medição usa uma projeção de 11 colunas, sem os JOINs de enriquecimento. Uma alteração
+operacional deve preservar os testes e medir também esses JOINs, cujo custo não está nesta
+projeção.
 
 Mantemos **Delta via delta-rs para histórico e MERGE por ID**, em continuidade à ADR 0002.
 O resultado em um milhão mostra que particioná-lo pode ajudar, mas não exige essa organização

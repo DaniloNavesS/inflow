@@ -130,7 +130,7 @@ Cenário principal, com um senador, despesas de R$ 100 e atraso permitido de 2 m
 | 2 | despesa de 20/03 e despesa de 15/01, ambas na competência de maio | 1 `NO_PRAZO`, 1 `ATRASADO` | no prazo 100, ajuste 100 | `2024-03-01`: fevereiro fecha |
 | 3 | correções de valor: despesa de janeiro vai a 130, despesa de abril vai a 150 | 2 `NO_PRAZO`, 2 `ATRASADO` | no prazo 100, ajuste 130 | `2024-03-01` |
 
-Os 12 testes cobrem ainda: lote vazio não avança o watermark; reexecução sem mudança não gera lançamento; `total_revisado` bate
+Os 13 testes cobrem ainda: lote vazio não avança o watermark; reexecução sem mudança não gera lançamento; `total_revisado` bate
 com a origem mesmo quando uma correção muda a despesa de janela; o watermark não recua com
 competência antiga; data inválida ou futura usa a competência como janela; reiniciar o fluxo
 reprocessa tudo como um único lote.
@@ -161,8 +161,9 @@ outro. Em operação diária, o lote é o que a origem publicou desde a véspera
 se aproxima da defasagem medida.
 
 Esses números foram obtidos com os jobs `expenses` e `expense_windows` do projeto em um
-PostgreSQL 16 local. Antes do PR, repita a sequência acima no ambiente Docker e confira a
-tabela.
+PostgreSQL 16 local. A validação de 19/10/2026 repetiu a sequência no Docker com a carga de
+2024: 21.431 lançamentos `NO_PRAZO`, watermark `2024-10-01` e soma dos lançamentos igual a
+`sum(valor)` de `oltp.despesas`. Os totais mudam quando a fonte publica novos lançamentos.
 
 ## Limitações
 
