@@ -39,6 +39,10 @@ Para verificar o SLA operacional desde o último lake completo, execute
 `make lake-freshness` após construir a imagem analytics. O limite padrão é de
 24 horas.
 
+A base com Airflow sobe com `make airflow-up`. Consulte o
+[guia do Airflow](orchestration/README.md) para acesso, execução manual, ativação
+dos agendamentos e integração das transformações finais.
+
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
 modelagem, limitações e decisões arquiteturais estão na
