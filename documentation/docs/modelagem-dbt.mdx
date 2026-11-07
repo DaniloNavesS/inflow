@@ -104,7 +104,7 @@ execução concluída, sem ingestão concorrente. Falha pode deixar modelos de e
 
 `make test-models` passou com PostgreSQL 15, dbt-core 1.12.6 e dbt-postgres 1.9.1.
 Foram cinco execuções de `dbt build`: origem vazia, primeira carga, reexecução sem
-alteração, correção de nome e exclusão. Cada execução passou por 28 testes dbt, além das
+alteração, correção de nome e exclusão. Cada execução passou por 40 testes dbt, além das
 asserções SQL de comportamento. A suíte verifica lógica e persistência usando quatro
 despesas sintéticas; não mede desempenho nem comprova cobertura da base real.
 
@@ -143,3 +143,58 @@ R$ 32.290.271,35; a agregação mensal produziu 3.889 linhas. Quatro datas fisca
 da faixa válida foram sinalizadas sem excluir despesas. A primeira observação histórica
 registrou 3.516 fornecedores. Esses números descrevem a base local desta validação,
 não são limites fixos ou expectativas a impor a cargas futuras.
+
+
+## Comissões e estrutura de gabinete
+
+As fontes `oltp.comissoes`, `oltp.participacoes_comissao` e `oltp.estrutura_gabinete`
+também são transformadas pelo mesmo `make models`, com os seguintes contratos:
+
+| Modelo em `analytics_marts` | Granularidade |
+|---|---|
+| `dim_comissao` | Uma linha por comissão da origem |
+| `fct_participacoes_comissao` | Uma linha por ID de participação, com cargo e intervalo original |
+| `gestao_comissoes_senador` | Uma linha por senador na data de referência da execução |
+| `fct_estrutura_gabinete` | Uma linha por senador e ano informado pela origem |
+
+A pergunta 7 é atendida por `comissoes_com_vigencia_confirmada`: conta comissões
+distintas com início conhecido menor ou igual à referência e fim nulo ou maior ou igual
+à referência. Os limites são inclusivos. Dois cargos na mesma comissão não duplicam
+a contagem. Fim nulo significa intervalo aberto conforme a origem, sem comprovar que
+o vínculo continua ativo se a coleta estiver defasada.
+
+`vinculos_sem_inicio_conhecido` conta registros sem início cujo fim não exclui a referência.
+Eles não entram na contagem confirmada, pois a data de ingresso é desconhecida. Zero
+comissões confirmadas não garante ausência de vínculos: conferir esse campo e a cobertura
+da ingestão. Senadores sem registros continuam no resultado com contagens zero.
+
+A referência padrão é a data UTC do início da execução dbt, publicada na coluna
+`data_referencia`. Para reproduzir uma data específica:
+
+```bash
+docker compose run --build --rm modeling build --vars '{"data_referencia_comissoes": "2024-12-31"}'
+```
+
+Reprocessar outra referência substitui a tabela de gestão; os intervalos completos continuam
+na fato. Uma nova referência não recupera vínculos que a origem nunca coletou. `cargo` é o
+texto da fonte, não uma classificação de vagas. A pergunta 8 (vagas por partido vigente)
+não é inferida juntando esses vínculos ao partido atual do senador.
+
+A pergunta 12 pode consumir diretamente `fct_estrutura_gabinete`: `qtd_pessoal_gabinete`,
+`qtd_pessoal_escritorio` e `qtd_total_servidores` são quantitativos publicados, não cadastros
+individuais. Preservam-se também `auxilio_moradia` e `imovel_funcional`. Não somar anos
+para contar pessoas distintas; dado anual ausente não deve virar zero automaticamente.
+
+Para combinar despesas, comissões e gabinete em uma consulta, agregar cada fato na
+granularidade desejada antes da junção por senador. Unir fatos detalhados diretamente
+multiplicaria despesas por cargos e anos de gabinete.
+
+A validação acompanha somente a lógica implementada: reconciliação com as fontes,
+referências, contagem distinta de comissões, limites de vigência, início desconhecido e
+separação dos quantitativos anuais. Volume, distribuição, freshness e SLA continuam nas
+frentes responsáveis.
+
+Na base local, a reconciliação institucional preservou 425 comissões, 7.189 participações
+e 81 registros anuais de gabinete. A execução completa passou por 40 verificações dbt;
+a suíte isolada também passou nos cenários de origem vazia e reexecução. Esses volumes
+são observações da carga validada, não regras fixas para futuras execuções.

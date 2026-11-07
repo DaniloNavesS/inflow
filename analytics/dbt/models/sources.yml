@@ -6,3 +6,6 @@ sources:
       - name: despesas
       - name: fornecedores
       - name: senadores
+      - name: comissoes
+      - name: participacoes_comissao
+      - name: estrutura_gabinete

@@ -82,3 +82,41 @@ models:
         description: Quantidade de competências com lançamentos, inclusive lançamentos de valor zero.
       - name: media_mensal
         description: Valor total anual dividido pelos meses com despesas, em reais.
+  - name: dim_comissao
+    description: Cadastro de comissões do Senado e do Congresso.
+    columns:
+      - name: comissao_id
+        tests: [unique, not_null]
+  - name: fct_participacoes_comissao
+    description: Uma linha por participação da origem; cargos múltiplos não equivalem a comissões distintas.
+    columns:
+      - name: participacao_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: comissao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_comissao')
+                field: comissao_id
+  - name: fct_estrutura_gabinete
+    description: Um retrato de quantitativos por senador e ano da origem, sem identificar pessoas.
+    columns:
+      - name: estrutura_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+  - name: gestao_comissoes_senador
+    description: Contagem distinta de comissões com vigência conhecida na referência; vínculos sem início são reportados separadamente.
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
