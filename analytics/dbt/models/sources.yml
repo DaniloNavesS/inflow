@@ -1,0 +1,8 @@
+version: 2
+sources:
+  - name: oltp
+    schema: oltp
+    tables:
+      - name: despesas
+      - name: fornecedores
+      - name: senadores

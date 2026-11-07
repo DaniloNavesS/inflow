@@ -1,0 +1,70 @@
+version: 2
+models:
+  - name: dim_senador
+    description: Cadastro atual do senador; partido e UF não são históricos.
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
+  - name: dim_fornecedor
+    description: Cadastro atual, preservando a identidade da origem inclusive sem documento.
+    columns:
+      - name: fornecedor_id
+        tests: [unique, not_null]
+  - name: dim_categoria_despesa
+    columns:
+      - name: categoria_id
+        tests: [unique, not_null]
+  - name: dim_calendario
+    columns:
+      - name: data_id
+        tests: [unique, not_null]
+  - name: dim_fornecedor_historico
+    description: SCD tipo 2 por mudanças observadas; intervalos [observado_desde, observado_ate).
+    columns:
+      - name: fornecedor_versao_id
+        tests: [unique, not_null]
+      - name: fornecedor_id
+        tests: [not_null]
+      - name: observado_desde
+        tests: [not_null]
+  - name: fct_despesas
+    description: Uma linha por lançamento CEAPS. Valor em reais; ano e mês são competência da origem.
+    columns:
+      - name: despesa_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: fornecedor_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_fornecedor')
+                field: fornecedor_id
+      - name: categoria_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_categoria_despesa')
+                field: categoria_id
+      - name: competencia
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: data_calendario
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: valor
+        tests: [not_null]

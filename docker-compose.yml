@@ -88,6 +88,23 @@ services:
     networks:
       - inflow_network
 
+  modeling:
+    profiles: ["modeling"]
+    build:
+      context: .
+      dockerfile: analytics/dbt/Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
   benchmark-real:
     profiles: ["benchmark"]
     build:
