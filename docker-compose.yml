@@ -82,6 +82,7 @@ services:
       DB_USER: ${POSTGRES_USER:-inflow_user}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
       LAKE_DIR: /lake
+      LAKE_FRESHNESS_SLA_HOURS: ${LAKE_FRESHNESS_SLA_HOURS:-24}
     depends_on:
       postgres:
         condition: service_healthy

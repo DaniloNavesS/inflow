@@ -34,6 +34,7 @@ help:
 		'  make lake-check       Verifica DuckDB, Postgres e a pasta do lake' \
 		'  make lake-parquet     Materializa despesas_enriquecidas em Parquet' \
 		'  make lake             Materializa Parquet/Delta e compara consultas com o PostgreSQL' \
+		'  make lake-freshness   Verifica o SLA desde a última execução completa do lake' \
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
@@ -132,6 +133,10 @@ lake-delta: start build-analytics
 	$(COMPOSE) run --rm analytics python main.py delta
 
 lake-consumption: lake
+
+.PHONY: lake-freshness
+lake-freshness:
+	$(COMPOSE) run --rm --no-deps analytics python freshness.py
 
 lake-check: start
 	$(COMPOSE) run --rm analytics python main.py check

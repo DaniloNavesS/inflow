@@ -35,6 +35,10 @@ gestão com o PostgreSQL e registrar a execução em `monitoring.pipeline_runs`.
 Os resultados e tempos ficam em `lake/consumo.json`. Veja o
 [guia da camada analítica](documentation/docs/camada-analitica.mdx) para os limites e comandos.
 
+Para verificar o SLA operacional desde o último lake completo, execute
+`make lake-freshness` após construir a imagem analytics. O limite padrão é de
+24 horas.
+
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
 modelagem, limitações e decisões arquiteturais estão na

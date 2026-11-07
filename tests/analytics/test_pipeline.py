@@ -31,6 +31,12 @@ def test_pipeline_is_monitored_and_rerunnable(tmp_path, db, monkeypatch):
     monkeypatch.setattr(pipeline, "LAKE_DIR", tmp_path)
     pipeline.run_lake()
     pipeline.run_lake()
+    from freshness import check_database
+    # A conexão de teste pode estar em uma transação iniciada antes do pipeline.
+    db.rollback()
+    report = check_database(db, 24)
+    assert report["status"] == "fresh"
+    assert report["last_success_at"] is not None
     with db.cursor() as cur:
         cur.execute("""
             SELECT status FROM monitoring.pipeline_runs
