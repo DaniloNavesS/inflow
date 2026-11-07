@@ -120,3 +120,47 @@ models:
     columns:
       - name: senador_id
         tests: [unique, not_null]
+  - name: dim_sessao_plenaria
+    description: Sessões coletadas; a amostra não equivale à totalidade de sessões de uma legislatura.
+    columns:
+      - name: sessao_id
+        tests: [unique, not_null]
+  - name: dim_documento_dsf
+    description: Documentos do DSF com proveniência, páginas e status do parser, incluindo PARCIAL e FALHA.
+    columns:
+      - name: documento_dsf_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+  - name: fct_registros_presenca
+    description: Uma linha por registro documental original; não cria ausências e preserva identidades não resolvidas.
+    columns:
+      - name: registro_presenca_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+      - name: documento_dsf_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_documento_dsf')
+                field: documento_dsf_id
+      - name: senador_id
+        description: Pode ser nulo se a identidade não foi resolvida na origem.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: apto_contagem
+        description: Presença com resolução EXATA, documento SUCESSO e sessão consistente; independe da marca de voto.
+  - name: gestao_presencas_documentadas
+    description: Sessões distintas com presença documentada por senador e ano da sessão; não é taxa de comparecimento.

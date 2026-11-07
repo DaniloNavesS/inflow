@@ -9,3 +9,6 @@ sources:
       - name: comissoes
       - name: participacoes_comissao
       - name: estrutura_gabinete
+      - name: sessao_plenaria
+      - name: documento_dsf
+      - name: registro_presenca

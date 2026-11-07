@@ -33,7 +33,7 @@ cadastral, preservação da versão anterior, média, empate e data inválida. N
 
 | Schema | Conteúdo |
 |---|---|
-| `analytics_staging` | Views de despesas, senadores e fornecedores; nomes e tipos da origem preservados |
+| `analytics_staging` | Views das fontes de despesas, cadastros, comissões, gabinete e DSF |
 | `analytics_intermediate` | Preparação de chaves de categoria e sinalização de datas |
 | `analytics_history` | Snapshot persistente `fornecedores_historico` |
 | `analytics_marts` | Tabelas de fatos, dimensões, agregações e respostas de gestão |
@@ -235,3 +235,73 @@ a escrita, edição e remoção integral de `target/` e `logs/` passaram no host
 local, sem sudo. Os comandos foram repetidos após remover os diretórios, validando também
 a preparação inicial. A suíte isolada foi executada com UID/GID `12345:12346`, para
 verificar os diretórios internos sem depender do usuário padrão da imagem.
+
+## Presenças documentadas no DSF
+
+As fontes `oltp.sessao_plenaria`, `oltp.documento_dsf` e `oltp.registro_presenca` são
+transformadas no mesmo comando `make models`:
+
+| Modelo em `analytics_marts` | Granularidade |
+|---|---|
+| `dim_sessao_plenaria` | Sessão coletada, com data e tipo originais |
+| `dim_documento_dsf` | Documento/intervalo de páginas cadastrado, com URL, SHA-256 e status do parser |
+| `fct_registros_presenca` | ID de registro extraído da origem, mesmo sem identidade resolvida |
+| `gestao_presencas_documentadas` | Senador identificado × ano da sessão |
+
+A fato mantém nome, partido e UF documentais, página, resolução de identidade, situação e
+marca de voto. Não substitui o partido documental pelo cadastro atual. `voto_registrado`
+pode ser falso ou nulo; não é condição de presença nem corresponde a um conjunto de
+votos nominais abertos individualizados. Os documentos `PARCIAL` e `FALHA` continuam na
+dimensão mesmo quando não possuem linhas extraídas.
+
+`apto_contagem=true` exige simultaneamente identidade não nula com resolução `EXATA`,
+situação `PRESENTE`, documento com parser `SUCESSO` e correspondência entre a sessão do
+registro e a sessão do documento. O modelo preserva inconsistências entre essas sessões
+na fato, sinalizando `sessao_documento_consistente=false` e excluindo a linha da contagem.
+Isso evita contar registros antigos que permaneceram na origem após uma falha do parser.
+
+A tabela de gestão conta sessões distintas em `sessoes_com_presenca_documentada`; duas
+linhas ou documentos da mesma sessão não duplicam a presença de um senador. Inclui também
+`registros_documentais` e `registros_fora_contagem` para tornar explícita a diferença entre
+linhas extraídas e evidências aceitas. Esses campos contam linhas, não sessões. Registros
+com senador nulo permanecem na fato e não recebem atribuição artificial no agregado.
+Senadores sem linhas documentais não são gerados no agregado; zero presenças aceitas
+entre registros existentes não significa ausência.
+
+O ano refere-se à data da sessão, não à data de publicação do DSF ou à competência CEAPS.
+As sessões mantêm seu tipo original: a contagem cobre as sessões coletadas, sem inferir
+que toda sessão seja deliberativa. Para um recorte por tipo ou período, filtrar a fato
+pela dimensão de sessão e contar sessões distintas com `apto_contagem=true`. O calendário
+existente cobre datas de despesas; datas de sessões são acessadas pela própria dimensão.
+
+Esta entrega não calcula taxa de assiduidade: as três sessões reais constituem uma amostra,
+e não há denominador de sessões às quais cada parlamentar estava obrigado a comparecer.
+Também não transforma falta de linha, parser falho ou identidade não resolvida em ausência.
+Os dados são base documental para a frente do painel, sem afirmar cobertura das perguntas
+5 e 6 sobre taxas.
+
+## Cobertura das perguntas de gestão
+
+| Perguntas | Situação dos modelos |
+|---|---|
+| 1 e 11: média mensal e categoria de maior parcela | Implementadas, com meses com despesas, empates e percentual anual |
+| 7: comissões por senador | Implementada por referência temporal, com limites de cobertura explicitados |
+| 12: quantitativo de pessoal | Fato anual implementada, preservando os quantitativos publicados |
+| 5 e 6: taxas de presença | Evidência documental modelada; taxa depende de cobertura e elegibilidade ainda ausentes |
+| 4 e 8: despesas/vagas por partido vigente | Dependem de integração histórica de filiações, sem substituição pelo partido atual |
+| 10: média por UF | UF atual disponível; atribuição histórica ainda não implementada |
+| 9: votos nominais abertos | Indicador documental de voto não atende a granularidade de voto nominal |
+| 13: donos de fornecedores | Vínculos empresariais ainda não transformados em marts dbt |
+| 2 e 3: atipicidade por LLM | Classificação não é produzida pelos modelos atuais |
+
+O requisito de ferramenta, camadas, fatos, dimensões e pelo menos uma dimensão histórica
+está coberto. Cobrir todas as perguntas exige trabalho adicional de fontes e regras,
+que não deve ser confundido com a conclusão desse requisito básico de modelagem.
+
+Na validação local de presença, foram preservadas as 3 sessões, os 3 documentos e os
+220 registros da origem, incluindo 2 identidades não resolvidas. A regra conservadora
+aceitou 70 registros do documento `SUCESSO`; outros 150 pertencem a dois documentos
+`PARCIAL` e permanecem consultáveis na fato, fora da contagem. Não foram observadas
+sessões inconsistentes nessa amostra real. Os cenários sintéticos cobrem essa inconsistência,
+repetição de sessão em documentos distintos, presença sem voto e documentos sem linhas.
+A execução completa passou por 51 verificações dbt na base real e no ambiente isolado.
