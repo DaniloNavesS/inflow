@@ -139,3 +139,9 @@ monitoring
 ## Documentação
 
 A documentação completa do projeto, arquitetura, ADRs, modelo de dados e decisões técnicas está disponível no GitHub Pages do projeto.
+
+### Modelagem dimensional
+
+Após a ingestão, `make models` executa o dbt no PostgreSQL e publica fatos, dimensões,
+agregações mensais e histórico de fornecedores. `make test-models` valida a transformação
+em banco descartável. Veja os [contratos e limites da modelagem](documentation/docs/modelagem-dbt.mdx).

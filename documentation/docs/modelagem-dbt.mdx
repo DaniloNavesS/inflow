@@ -1,0 +1,108 @@
+---
+title: Modelagem dimensional com dbt
+sidebar_position: 9
+---
+
+# Modelagem dimensional com dbt
+
+Ana e Danilo implementam as transformações em `analytics/dbt`. O dbt publica modelos
+no PostgreSQL, em schemas separados de `oltp`; o lake Parquet/Delta existente permanece
+independente. A escolha permite consumir os marts com ferramentas PostgreSQL e comparar
+as granularidades detalhada e mensal com `EXPLAIN (ANALYZE, BUFFERS)`.
+
+## Executar
+
+Depois de configurar `.env` e carregar a origem com `make ingestion`:
+
+```bash
+make models
+make test-models
+```
+
+`make models` constrói a imagem e executa `dbt build` (modelos, snapshot e testes na ordem
+do grafo). Não chama a API do Senado. É preciso repetir o comando após atualizar a origem.
+O serviço `modeling` recebe as mesmas variáveis do banco que os serviços existentes;
+nenhuma senha é gravada no perfil. O alvo é `local`, com prefixo `analytics`.
+
+`make test-models` usa outro projeto Compose e banco descartável, sem portas ou volumes
+persistentes compartilhados. Valida dados sintéticos, reexecução sem mudanças, correção
+cadastral, preservação da versão anterior, média, empate e data inválida. Não chama APIs.
+
+## Camadas e contratos
+
+| Schema | Conteúdo |
+|---|---|
+| `analytics_staging` | Views de despesas, senadores e fornecedores; nomes e tipos da origem preservados |
+| `analytics_intermediate` | Preparação de chaves de categoria e sinalização de datas |
+| `analytics_history` | Snapshot persistente `fornecedores_historico` |
+| `analytics_marts` | Tabelas de fatos, dimensões, agregações e respostas de gestão |
+
+| Modelo | Uma linha por |
+|---|---|
+| `fct_despesas` | ID oficial do lançamento CEAPS |
+| `dim_senador` | Senador, com partido e UF atuais explicitamente nomeados |
+| `dim_fornecedor` | Identidade do fornecedor no OLTP |
+| `dim_fornecedor_historico` | Versão observada do cadastro de fornecedor |
+| `dim_categoria_despesa` | Tipo de despesa, identificado por MD5 do texto original |
+| `dim_calendario` | Dia entre os extremos de datas válidas e competências carregadas |
+| `agg_despesas_mensais` | Senador × ano × mês × categoria |
+| `gestao_media_mensal` | Senador × ano, média somente entre meses com despesas |
+| `gestao_maior_categoria` | Senador × ano × categoria empatada no maior total |
+
+Os fatos referenciam as dimensões atuais por `senador_id`, `fornecedor_id`, `categoria_id`
+e o calendário por `competencia` ou `data_calendario`. Não unir o fato ao histórico apenas
+por `fornecedor_id`: isso multiplicaria linhas. Para cadastro atual, usar `dim_fornecedor`.
+
+Valores mantêm a precisão NUMERIC da origem. Competência usa `ano`/`mes`, sem derivar da
+data fiscal. `data_despesa` sempre preserva o original; documentos fora de 2000–2100
+recebem `data_documento_valida=false` e `data_calendario=NULL`, sem excluir valores das
+métricas. O calendário cobre os intervalos válidos completos e fica vazio se não houver dados.
+
+`materializado_em` indica quando a fato foi construída e é propagado para a agregação;
+não representa frescor da API nem sucesso global do pipeline. As tabelas de gestão
+preservam as regras de `analytics/src/consumption.py` (meses com despesas e empates).
+
+## Histórico: tempo de observação
+
+O snapshot usa `strategy=check` em `documento` e `razao_social`, com chave `fornecedor_id`.
+Mudança encerra uma versão e cria outra; reexecução idêntica não cria versões. Exclusão
+encerra a versão atual. `fornecedor_versao_id` identifica a versão; os intervalos são
+inclusivos no início e exclusivos no fim, sendo o fim nulo para registros atuais.
+
+Esse é histórico SCD tipo 2 observado desde a primeira execução, conforme a estratégia de
+[snapshots do dbt](https://docs.getdbt.com/docs/build/snapshots). Não recupera alterações
+anteriores, nem mudanças ocorridas entre execuções. Não descreve a empresa na data de uma
+despesa passada. Por isso a fato não recebe uma chave histórica artificial para documentos
+anteriores ao início da observação. Para consultar um retrato cadastral observado, filtrar
+`observado_desde <= instante` e `(observado_ate > instante OR observado_ate IS NULL)`.
+
+As migrações antigas de mandatos e filiações não são fontes deste projeto dbt: o caminho
+atual de ingestão não as preenche. Partido histórico exige integração específica futura;
+não é inferido do cadastro atual. O histórico de fornecedores atende o requisito da
+entrega sem essa dependência.
+
+O snapshot é persistente: não apagar `analytics_history` entre execuções. Os demais
+modelos são reconstruídos integralmente, opção proporcional ao volume atual. O comando
+não publica todos os marts numa única transação; consumidores devem consultar após uma
+execução concluída, sem ingestão concorrente. Falha pode deixar modelos de execuções distintas.
+
+## Integrações com a equipe
+
+- Orquestração: executar `make models` após ingestão bem-sucedida; usar saída não zero para
+  detectar falhas. Agendamento, retry, backfill e SLA pertencem à frente de orquestração.
+- Qualidade: testes básicos de chaves, referências, reconciliação por lançamento/agregado
+  e intervalos acompanham os modelos. A suíte ampla de volume e distribuição é da frente
+  de qualidade.
+- Otimização: comparar `fct_despesas` e `agg_despesas_mensais` usando o mesmo agrupamento
+  e filtros de competência; a mensal não permite detalhar fornecedor ou documento.
+- Painel: consumir `analytics_marts`; documentar que partido/UF são atuais. Para média e
+  categoria vencedora, usar os modelos `gestao_*`. Associar indicador de última execução
+  bem-sucedida ao monitoramento quando integrado pela frente de orquestração.
+
+## Validação da implementação
+
+`make test-models` passou com PostgreSQL 15, dbt-core 1.12.6 e dbt-postgres 1.9.1.
+Foram cinco execuções de `dbt build`: origem vazia, primeira carga, reexecução sem
+alteração, correção de nome e exclusão. Cada execução passou por 27 testes dbt, além das
+asserções SQL de comportamento. A suíte verifica lógica e persistência usando três
+despesas sintéticas; não mede desempenho nem comprova cobertura da base real.
