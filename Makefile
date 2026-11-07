@@ -1,5 +1,9 @@
 COMPOSE=docker compose
 
+# Nomes próprios: não reutilizar UID/GID do shell.
+export MODELING_UID ?= $(shell id -u)
+export MODELING_GID ?= $(shell id -g)
+
 .DEFAULT_GOAL := help
 
 .PHONY: help start down stop restart ps logs ingestion test cnpj-test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test cdc-semantics cdc-replay-demo build-analytics lake-check lake-parquet test-lake docs docs-build db-shell clean
@@ -180,12 +184,15 @@ db-shell:
 clean:
 	$(COMPOSE) down -v
 
-.PHONY: models models-docs test-models
-models: start
+.PHONY: models models-docs models-prepare test-models
+models-prepare:
+	mkdir -p analytics/dbt/target analytics/dbt/logs
+
+models: start models-prepare
 	$(COMPOSE) run --build --rm modeling build
 
 test-models:
 	bash tests/modeling/run.sh
 
-models-docs: start
+models-docs: start models-prepare
 	$(COMPOSE) run --build --rm modeling docs generate

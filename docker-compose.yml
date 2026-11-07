@@ -93,9 +93,18 @@ services:
     build:
       context: .
       dockerfile: analytics/dbt/Dockerfile
+    user: "${MODELING_UID:-1000}:${MODELING_GID:-1000}"
     volumes:
-      - ./analytics/dbt/target:/app/dbt/target
-      - ./analytics/dbt/logs:/app/dbt/logs
+      - type: bind
+        source: ./analytics/dbt/target
+        target: /app/dbt/target
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./analytics/dbt/logs
+        target: /app/dbt/logs
+        bind:
+          create_host_path: false
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

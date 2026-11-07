@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export MODELING_UID="${MODELING_UID:-$(id -u)}"
+export MODELING_GID="${MODELING_GID:-$(id -g)}"
 cd "$(dirname "$0")/../.."
 compose=(docker compose -p inflow-modeling-tests -f tests/modeling/compose.yml)
 trap '"${compose[@]}" down --volumes --remove-orphans' EXIT

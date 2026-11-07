@@ -198,3 +198,40 @@ Na base local, a reconciliação institucional preservou 425 comissões, 7.189 p
 e 81 registros anuais de gabinete. A execução completa passou por 40 verificações dbt;
 a suíte isolada também passou nos cenários de origem vazia e reexecução. Esses volumes
 são observações da carga validada, não regras fixas para futuras execuções.
+
+## Permissões dos artefatos locais
+
+`make models` e `make models-docs` exportam `MODELING_UID` e `MODELING_GID` com os IDs
+do usuário que executa o Make e criam `target/` e `logs/` no host antes de iniciar o
+contêiner. O serviço usa esses IDs para gravar os artefatos. A imagem também tem usuário
+não root por padrão e diretórios internos graváveis por UIDs arbitrários, inclusive no
+ambiente de teste sem bind mounts. O código e o perfil permanecem sem escrita para esse usuário.
+
+Ao chamar Compose diretamente, preparar as pastas e informar os IDs (o padrão do serviço
+é `1000:1000`, que pode não corresponder ao seu usuário):
+
+```bash
+mkdir -p analytics/dbt/target analytics/dbt/logs
+export MODELING_UID="$(id -u)"
+export MODELING_GID="$(id -g)"
+docker compose run --build --rm modeling build
+```
+
+Os mounts não criam pastas automaticamente: diretórios ausentes exigem a preparação acima
+ou os comandos Make. Isso evita que o Docker crie diretórios locais pertencentes a root.
+Não executar esses comandos com sudo.
+
+Se uma execução anterior criou artefatos pertencentes a root, corrigir uma única vez
+somente a propriedade dos dois diretórios gerados. A execução root abaixo é restrita a
+essa reparação; não é usada para executar o dbt:
+
+```bash
+docker compose run --no-deps --rm --user 0:0 --entrypoint chown modeling \
+  -R "$(id -u):$(id -g)" /app/dbt/target /app/dbt/logs
+```
+
+Na validação da correção, os dois comandos Make passaram com UID/GID `1000:1000`;
+a escrita, edição e remoção integral de `target/` e `logs/` passaram no host como usuário
+local, sem sudo. Os comandos foram repetidos após remover os diretórios, validando também
+a preparação inicial. A suíte isolada foi executada com UID/GID `12345:12346`, para
+verificar os diretórios internos sem depender do usuário padrão da imagem.
