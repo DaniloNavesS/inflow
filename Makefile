@@ -37,6 +37,7 @@ help:
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make models           Publica os modelos dimensionais com dbt' \
+		'  make models-docs      Gera catálogo e linhagem dos modelos dbt' \
 		'  make test-models      Valida os modelos em PostgreSQL descartável' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
@@ -179,9 +180,12 @@ db-shell:
 clean:
 	$(COMPOSE) down -v
 
-.PHONY: models test-models
+.PHONY: models models-docs test-models
 models: start
 	$(COMPOSE) run --build --rm modeling build
 
 test-models:
 	bash tests/modeling/run.sh
+
+models-docs: start
+	$(COMPOSE) run --build --rm modeling docs generate

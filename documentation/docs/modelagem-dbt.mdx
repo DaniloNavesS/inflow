@@ -17,6 +17,7 @@ Depois de configurar `.env` e carregar a origem com `make ingestion`:
 ```bash
 make models
 make test-models
+make models-docs
 ```
 
 `make models` constrói a imagem e executa `dbt build` (modelos, snapshot e testes na ordem
@@ -103,6 +104,42 @@ execução concluída, sem ingestão concorrente. Falha pode deixar modelos de e
 
 `make test-models` passou com PostgreSQL 15, dbt-core 1.12.6 e dbt-postgres 1.9.1.
 Foram cinco execuções de `dbt build`: origem vazia, primeira carga, reexecução sem
-alteração, correção de nome e exclusão. Cada execução passou por 27 testes dbt, além das
-asserções SQL de comportamento. A suíte verifica lógica e persistência usando três
+alteração, correção de nome e exclusão. Cada execução passou por 28 testes dbt, além das
+asserções SQL de comportamento. A suíte verifica lógica e persistência usando quatro
 despesas sintéticas; não mede desempenho nem comprova cobertura da base real.
+
+
+## Consumo e catálogo
+
+`gestao_maior_categoria` inclui `valor_total_ano` e `percentual_total_ano` (0 a 100).
+Todas as categorias empatadas são retornadas. Se o total do senador no ano for zero,
+o percentual é nulo, pois a participação é indefinida. A média mensal e as categorias
+vencedoras são reconciliadas diretamente contra o OLTP por um teste dbt independente
+da agregação mensal. Isso também protege contra divergências entre as granularidades.
+
+`make models` preserva `manifest.json`, `run_results.json` e SQL compilado em
+`analytics/dbt/target/`, além do log em `analytics/dbt/logs/`. São artefatos locais,
+ignorados pelo Git. `run_results.json` descreve a última invocação que o escreveu;
+para registrar sucesso, conferir o comando e seu código de saída, não apenas a presença
+do arquivo. Execuções concorrentes no mesmo diretório não são suportadas.
+
+`make models-docs` gera `catalog.json` e `index.html` no mesmo diretório. Para explorar
+localmente, executar em terminais separados:
+
+```bash
+# Gera o catálogo após uma publicação bem-sucedida
+make models-docs
+# Serve os arquivos gerados; abrir http://localhost:8080
+python3 -m http.server 8080 --bind 127.0.0.1 --directory analytics/dbt/target
+```
+
+O catálogo contém metadados, descrições e linhagem. O comando não agenda o pipeline nem
+atesta freshness da origem. Consultar primeiro os contratos deste guia ao construir o painel.
+
+## Validação na base local
+
+A publicação e a reconciliação na base real preservaram 21.430 despesas, com total de
+R$ 32.290.271,35; a agregação mensal produziu 3.889 linhas. Quatro datas fiscais fora
+da faixa válida foram sinalizadas sem excluir despesas. A primeira observação histórica
+registrou 3.516 fornecedores. Esses números descrevem a base local desta validação,
+não são limites fixos ou expectativas a impor a cargas futuras.

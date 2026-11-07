@@ -8,3 +8,7 @@ lake
 resultados
 resultados-adr
 documentation/build
+
+analytics/dbt/target
+analytics/dbt/logs
+analytics/dbt/dbt_packages

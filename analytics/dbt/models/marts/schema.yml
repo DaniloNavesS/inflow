@@ -68,3 +68,17 @@ models:
                 field: data_id
       - name: valor
         tests: [not_null]
+  - name: gestao_maior_categoria
+    description: Categorias empatadas no maior gasto anual, com participação percentual no total CEAPS do senador.
+    columns:
+      - name: valor_total_ano
+        description: Soma de todas as categorias do senador no ano de competência.
+      - name: percentual_total_ano
+        description: Percentual entre 0 e 100; nulo quando o total anual é zero.
+  - name: gestao_media_mensal
+    description: Média dos totais mensais por senador e ano, contando somente meses com despesas.
+    columns:
+      - name: meses_com_despesas
+        description: Quantidade de competências com lançamentos, inclusive lançamentos de valor zero.
+      - name: media_mensal
+        description: Valor total anual dividido pelos meses com despesas, em reais.

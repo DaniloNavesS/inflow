@@ -93,6 +93,9 @@ services:
     build:
       context: .
       dockerfile: analytics/dbt/Dockerfile
+    volumes:
+      - ./analytics/dbt/target:/app/dbt/target
+      - ./analytics/dbt/logs:/app/dbt/logs
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
