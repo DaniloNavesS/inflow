@@ -2,7 +2,7 @@ import logging
 import sys
 import time
 from clients.senate import get_resilient_session
-from config import ENABLE_CNPJ_OWNERS, INGESTION_YEAR
+from config import ENABLE_CNPJ_OWNERS, INGESTION_YEAR, INGESTION_YEARS
 from database.postgres import wait_for_database
 from jobs.attendance import ingest_dsf_attendance
 from jobs.cnpj_owners import ingest_cnpj_owners
@@ -79,6 +79,15 @@ def execute_monitored_job(
         )
         raise
 
+def for_each_year(function, session, conn, run_id, senador_ids=None):
+    """Aplica um job anual a cada ano do período; sem período explícito, é um só."""
+    for ano in INGESTION_YEARS:
+        if senador_ids is None:
+            function(session, conn, ano, run_id)
+        else:
+            function(session, conn, senador_ids, ano, run_id)
+
+
 def main():
     logger.info(
         "Iniciando pipeline de carga automatizada InFlow (E1)..."
@@ -136,10 +145,10 @@ def main():
             conn,
             run_id,
             "expenses",
+            for_each_year,
             ingest_ceaps_despesas,
             session,
             conn,
-            INGESTION_YEAR,
             run_id,
         )
 
@@ -169,12 +178,12 @@ def main():
             conn,
             run_id,
             "staff",
+            for_each_year,
             ingest_estrutura_gabinete,
             session,
             conn,
-            senador_ids,
-            INGESTION_YEAR,
             run_id,
+            senador_ids=senador_ids,
         )
 
         # 7. Sócios e dados cadastrais (RFB) dos fornecedores. Enriquecimento opcional:
