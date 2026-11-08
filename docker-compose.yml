@@ -132,7 +132,14 @@ services:
   airflow:
     <<: *airflow-image
     profiles: ["orchestration"]
-    command: standalone
+    # O pool que serializa ingestão/lake precisa existir antes do primeiro run.
+    command:
+      - bash
+      - -ec
+      - |
+        airflow db migrate
+        airflow pools set inflow_exclusivo 1 "Serializa ingestão, lake e backfill"
+        exec airflow standalone
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"

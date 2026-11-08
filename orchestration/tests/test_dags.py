@@ -11,7 +11,7 @@ class DagTests(unittest.TestCase):
 
     def test_imports(self):
         self.assertEqual(self.bag.import_errors, {})
-        self.assertEqual(set(self.bag.dags), {"inflow_pipeline", "inflow_freshness"})
+        self.assertEqual(set(self.bag.dags), {"inflow_pipeline", "inflow_freshness", "inflow_backfill"})
 
     def test_dependencies_and_failure_blocking(self):
         dag = self.bag.dags["inflow_pipeline"]
