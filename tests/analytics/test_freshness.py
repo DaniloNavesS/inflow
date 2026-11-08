@@ -57,6 +57,31 @@ class FreshnessTests(unittest.TestCase):
         self.assertEqual(report["age_seconds"], 7200)
         self.assertEqual(report["status"], "fresh")
 
+    def test_pipeline_is_reported_and_defaults_to_lake(self):
+        self.assertEqual(self.evaluate(self.now)["pipeline"], "analytics_lake")
+        report = freshness.evaluate(None, now=self.now, sla_hours=24, pipeline="dbt_models")
+        self.assertEqual((report["pipeline"], report["status"]), ("dbt_models", "missing"))
+
+    def test_blank_pipeline_is_rejected(self):
+        for value in ("", "  "):
+            with self.subTest(pipeline=value), self.assertRaises(ValueError):
+                freshness.evaluate(self.now, now=self.now, sla_hours=24, pipeline=value)
+
+    def test_query_filters_by_the_requested_pipeline(self):
+        db = MagicMock()
+        cursor = db.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (None, self.now)
+        report = freshness.check_database(db, 24, "dbt_models")
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("pipeline_name = %s", sql)
+        self.assertEqual(params, ("dbt_models",))
+        self.assertEqual((report["pipeline"], report["status"]), ("dbt_models", "missing"))
+
+    def test_cli_rejects_blank_pipeline_before_connecting(self):
+        with self.assertRaises(SystemExit) as raised:
+            freshness.main(["--pipeline", " "])
+        self.assertEqual(raised.exception.code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

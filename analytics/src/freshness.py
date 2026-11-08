@@ -8,8 +8,13 @@ from contextlib import closing
 from datetime import datetime, timezone
 
 
-def evaluate(last_success, *, now, sla_hours):
+DEFAULT_PIPELINE = "analytics_lake"
+
+
+def evaluate(last_success, *, now, sla_hours, pipeline=DEFAULT_PIPELINE):
     """Sem sucesso anterior ou com relógio inválido, nunca aprova o SLA."""
+    if not pipeline or not pipeline.strip():
+        raise ValueError("O nome do pipeline não pode ser vazio.")
     if not math.isfinite(sla_hours) or sla_hours <= 0:
         raise ValueError("O SLA deve ser um número finito maior que zero.")
     if now.tzinfo is None or (last_success is not None and last_success.tzinfo is None):
@@ -21,7 +26,7 @@ def evaluate(last_success, *, now, sla_hours):
         "fresh" if age <= sla_hours * 3600 else "stale"
     )
     return {
-        "pipeline": "analytics_lake",
+        "pipeline": pipeline,
         "metric": "seconds_since_last_success",
         "checked_at": now.isoformat(),
         "last_success_at": last_success.isoformat() if last_success else None,
@@ -31,18 +36,18 @@ def evaluate(last_success, *, now, sla_hours):
     }
 
 
-def check_database(db, sla_hours):
+def check_database(db, sla_hours, pipeline=DEFAULT_PIPELINE):
     # Usa o relógio do banco para não comparar relógios de hosts diferentes.
     # Falhas posteriores não renovam a data do último sucesso.
     with db.cursor() as cursor:
         cursor.execute("""
             SELECT max(finished_at), CURRENT_TIMESTAMP
             FROM monitoring.pipeline_runs
-            WHERE pipeline_name = 'analytics_lake'
+            WHERE pipeline_name = %s
               AND status = 'success' AND finished_at IS NOT NULL
-        """)
+        """, (pipeline,))
         last_success, now = cursor.fetchone()
-    return evaluate(last_success, now=now, sla_hours=sla_hours)
+    return evaluate(last_success, now=now, sla_hours=sla_hours, pipeline=pipeline)
 
 
 def main(argv=None):
@@ -52,10 +57,15 @@ def main(argv=None):
         default=os.getenv("LAKE_FRESHNESS_SLA_HOURS", "24"),
         help="Tempo máximo desde o último lake completo (padrão: 24 horas).",
     )
+    parser.add_argument(
+        "--pipeline", default=DEFAULT_PIPELINE,
+        help="Pipeline em monitoring.pipeline_runs (padrão: analytics_lake).",
+    )
     args = parser.parse_args(argv)
     try:
         # Valida antes de abrir a conexão.
-        evaluate(None, now=datetime.now(timezone.utc), sla_hours=args.sla_hours)
+        evaluate(None, now=datetime.now(timezone.utc), sla_hours=args.sla_hours,
+                 pipeline=args.pipeline)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -68,7 +78,7 @@ def main(argv=None):
             user=DB_USER, password=DB_PASSWORD, connect_timeout=5,
             options="-c statement_timeout=10000 -c default_transaction_read_only=on",
         )) as db:
-            report = check_database(db, args.sla_hours)
+            report = check_database(db, args.sla_hours, args.pipeline)
     except Exception as exc:
         # Não imprime a conexão nem mensagens que possam conter credenciais.
         print(json.dumps({"status": "error", "error_type": type(exc).__name__}))
