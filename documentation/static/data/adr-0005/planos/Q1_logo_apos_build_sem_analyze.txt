@@ -1,0 +1,25 @@
+-- Cenário: primeira execução logo após o dbt build que criou o índice, antes do post_hook
+-- com ANALYZE (2026-11-08). A tabela recém-criada não tinha estatísticas nem mapa de
+-- visibilidade: estimativa de 3 linhas para 771 reais e Bitmap Heap Scan em vez de
+-- Index Only Scan.
+
+                                                                      QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=16.23..16.31 rows=3 width=74) (actual time=0.389..0.555 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=44
+   ->  Sort  (cost=16.23..16.24 rows=3 width=52) (actual time=0.373..0.404 rows=771 loops=1)
+         Sort Key: mes, categoria_id
+         Sort Method: quicksort  Memory: 87kB
+         Buffers: shared hit=44
+         ->  Bitmap Heap Scan on fct_despesas  (cost=4.45..16.21 rows=3 width=52) (actual time=0.046..0.155 rows=771 loops=1)
+               Recheck Cond: ((senador_id = 581) AND (ano = 2025))
+               Heap Blocks: exact=35
+               Buffers: shared hit=44
+               ->  Bitmap Index Scan on e0b65295f9675a24e38bc7469b17d5f8  (cost=0.00..4.45 rows=3 width=0) (actual time=0.037..0.037 rows=771 loops=1)
+                     Index Cond: ((senador_id = 581) AND (ano = 2025))
+                     Buffers: shared hit=9
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.108 ms
+ Execution Time: 0.635 ms

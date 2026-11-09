@@ -1,0 +1,18 @@
+-- Cenário: primeira execução logo após o dbt build com post_hook "analyze {{ this }}"
+-- (2026-11-09). As estatísticas já existem (estimativa de 699 linhas para 771 reais).
+-- O mapa de visibilidade ainda depende do autovacuum, por isso o plano usa Bitmap Heap
+-- Scan; "read=8" são páginas do índice recém-criado ainda fora do cache.
+-- Saída filtrada às linhas de nó, estimativa, buffers e tempo.
+
+ Sort  (cost=1705.62..1705.86 rows=96 width=75) (actual time=2.240..2.244 rows=54 loops=1)
+   Buffers: shared hit=45 read=8
+   ->  HashAggregate  (cost=1701.26..1702.46 rows=96 width=75) (actual time=2.146..2.161 rows=54 loops=1)
+         Buffers: shared hit=39 read=8
+         ->  Bitmap Heap Scan on fct_despesas  (cost=31.58..1694.27 rows=699 width=41) (actual time=0.976..1.790 rows=771 loops=1)
+               Heap Blocks: exact=35
+               Buffers: shared hit=39 read=8
+               ->  Bitmap Index Scan on "57b40ac36644b7261b2be8b361fd63af"  (cost=0.00..31.41 rows=699 width=0) (actual time=0.919..0.919 rows=771 loops=1)
+                     Buffers: shared hit=4 read=8
+ Planning:
+   Buffers: shared hit=193
+ Execution Time: 2.508 ms

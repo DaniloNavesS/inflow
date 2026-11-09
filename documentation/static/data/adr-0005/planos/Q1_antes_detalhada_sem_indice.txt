@@ -1,0 +1,24 @@
+-- Cenário: Q1_antes_detalhada_sem_indice (2026-11-09T02:30:51Z, 7 execuções)
+-- Tempos (ms): 9.066 10.077 10.251 11.825 13.727 13.803 17.015 
+-- Preparo: SET enable_indexscan = off; SET enable_bitmapscan = off; SET enable_indexonlyscan = off; 
+-- SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM analytics_marts.fct_despesas WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=4741.00..4751.26 rows=96 width=75) (actual time=9.644..9.859 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=3029
+   ->  Sort  (cost=4741.00..4742.81 rows=725 width=41) (actual time=9.620..9.660 rows=771 loops=1)
+         Sort Key: mes, categoria_id
+         Sort Method: quicksort  Memory: 87kB
+         Buffers: shared hit=3029
+         ->  Seq Scan on fct_despesas  (cost=0.00..4706.56 rows=725 width=41) (actual time=8.771..9.292 rows=771 loops=1)
+               Filter: ((senador_id = 581) AND (ano = 2025))
+               Rows Removed by Filter: 111066
+               Buffers: shared hit=3029
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.167 ms
+ Execution Time: 10.077 ms

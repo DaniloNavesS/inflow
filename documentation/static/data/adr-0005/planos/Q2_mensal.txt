@@ -1,0 +1,18 @@
+-- Cenário: Q2_mensal (2026-11-09T02:31:03Z, 7 execuções)
+-- Tempos (ms): 2.177 2.244 2.322 2.918 2.947 3.720 5.056 
+-- SELECT senador_id, ano, sum(valor_total) AS valor_total, count(*) AS meses_com_despesas,
+--        sum(valor_total) / count(*) AS media_mensal
+-- FROM analytics_marts.fct_despesas_mensais GROUP BY senador_id, ano;
+
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=211.14..221.04 rows=566 width=78) (actual time=1.866..2.078 rows=539 loops=1)
+   Group Key: senador_id, ano
+   Batches: 1  Memory Usage: 297kB
+   Buffers: shared hit=98
+   ->  Seq Scan on fct_despesas_mensais  (cost=0.00..154.57 rows=5657 width=14) (actual time=0.007..0.351 rows=5657 loops=1)
+         Buffers: shared hit=98
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.088 ms
+ Execution Time: 2.322 ms

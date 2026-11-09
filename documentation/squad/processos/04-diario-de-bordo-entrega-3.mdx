@@ -39,7 +39,7 @@ registro nesta página, não ausência de trabalho do integrante.
 | Yzabella Miranda — @redjsun | — A preencher: atividades e evidências da frente de orquestração. |
 | Manuella Valadares — @manuvaladares | — A preencher: atividades e evidências da frente de orquestração. |
 | Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
-| Vilmar Fagundes — @VilmarFagundes | — A preencher: atividades e evidências da frente de otimização. |
+| Vilmar Fagundes — @VilmarFagundes | Otimização: consulta do painel por senador otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais; script de medição reproduzível e ADR 0005. |
 | Yan Guimarães — @yanzin00 | — A preencher: atividades e evidências da frente do painel. |
 
 ## Semana de 2 a 8/11 — modelagem e transformações
@@ -148,7 +148,10 @@ backfill, freshness e SLA.
 
 #### Otimização — Vilmar
 
-— A preencher: PRs, commits, planos de execução antes/depois e comparação de granularidades.
+- [Otimização de consultas: planos antes/depois e comparação de granularidades](/docs/otimizacao-consultas).
+- [ADR 0005 — granularidade da fato e índice por plano de execução](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao).
+- Script de medição `scripts/adr/0005_planos_execucao.sh` e planos versionados em
+  `documentation/static/data/adr-0005/`.
 
 #### Painel — Yan
 
@@ -160,7 +163,7 @@ backfill, freshness e SLA.
 |---|---|---|---|
 | Orquestração — Yzabella e Manuella | — A preencher | — A preencher | — A preencher |
 | Qualidade — Victor | — A preencher | — A preencher | — A preencher |
-| Otimização — Vilmar | — A preencher | — A preencher | — A preencher |
+| Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
 | Painel — Yan | — A preencher | — A preencher | — A preencher |
 
 ## Continuidade
