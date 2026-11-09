@@ -1,9 +1,35 @@
 """Base E3: origem -> lake -> freshness."""
 from datetime import timedelta
+import json
+import logging
+import os
 
 import pendulum
 from airflow.sdk import DAG, Param, task
 from airflow.providers.standard.operators.bash import BashOperator
+
+
+def log_task_event(context, event):
+    """Somente metadados permitidos: não serializa contexto ou texto da exceção."""
+    ti = context.get("task_instance") or context.get("ti")
+    error = context.get("exception")
+    payload = {
+        "event": event,
+        "dag_id": getattr(ti, "dag_id", None),
+        "task_id": getattr(ti, "task_id", None),
+        "run_id": getattr(ti, "run_id", None),
+        "attempt": getattr(ti, "try_number", None),
+        "error_type": type(error).__name__ if error is not None else "UnknownError",
+    }
+    logging.getLogger("inflow.orchestration").error(json.dumps(payload, ensure_ascii=False))
+
+
+def on_task_failure(context):
+    log_task_event(context, "task_failed")
+
+
+def on_task_retry(context):
+    log_task_event(context, "task_retry")
 
 
 DEFAULT_ARGS = {
@@ -11,10 +37,12 @@ DEFAULT_ARGS = {
     "retries": 2,
     "retry_delay": timedelta(minutes=1),
     "execution_timeout": timedelta(hours=2),
+    "on_failure_callback": on_task_failure,
+    "on_retry_callback": on_task_retry,
 }
 
 
-# Ingestão e lake escrevem no mesmo OLTP/lake: um slot serializa pipeline e backfill.
+# Um slot serializa tarefas de escrita; não trava um DAG inteiro entre tarefas.
 EXCLUSIVE_POOL = "inflow_exclusivo"
 MAX_BACKFILL_YEARS = 10
 
@@ -54,9 +82,9 @@ def freshness_task():
 
 with DAG(
     dag_id="inflow_pipeline",
-    description="Atualiza origem e lake; ainda não inclui dbt/SQLMesh.",
+    description="Atualiza origem e lake; integração dbt pendente dos modelos.",
     start_date=pendulum.datetime(2026, 11, 1, tz="America/Sao_Paulo"),
-    schedule="0 6 * * *",
+    schedule=os.getenv("INFLOW_PIPELINE_SCHEDULE", "0 6 * * *"),
     catchup=False,
     max_active_runs=1,
     max_active_tasks=1,

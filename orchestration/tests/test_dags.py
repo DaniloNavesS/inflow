@@ -1,5 +1,8 @@
 """Contrato do DAG, sem banco, ingestão externa ou escrita no lake."""
 import unittest
+import json
+import os
+from types import SimpleNamespace
 
 from airflow.dag_processing.dagbag import DagBag
 from airflow.sdk.definitions.param import NOTSET
@@ -23,7 +26,7 @@ class DagTests(unittest.TestCase):
 
     def test_schedule_and_no_automatic_backfill(self):
         dag = self.bag.dags["inflow_pipeline"]
-        self.assertEqual(dag.schedule, "0 6 * * *")
+        self.assertEqual(dag.schedule, os.getenv("INFLOW_PIPELINE_SCHEDULE", "0 6 * * *"))
         self.assertEqual(dag.timezone.name, "America/Sao_Paulo")
         self.assertFalse(dag.catchup)
         self.assertEqual(dag.max_active_runs, 1)
@@ -77,6 +80,36 @@ class DagTests(unittest.TestCase):
         ):
             for name in names:
                 self.assertEqual(self.bag.dags[dag_id].get_task(name).pool, "inflow_exclusivo")
+
+    def test_failure_callback_does_not_disclose_exception_or_context_secrets(self):
+        task = self.bag.dags["inflow_pipeline"].get_task("materializar_lake")
+        ti = SimpleNamespace(dag_id="inflow_pipeline", task_id=task.task_id,
+                             run_id="test-failure", try_number=3)
+        with self.assertLogs("inflow.orchestration", level="ERROR") as captured:
+            for callback in task.on_failure_callback:
+                callback({"task_instance": ti,
+                          "exception": RuntimeError("password=segredo"),
+                          "DB_PASSWORD": "segredo"})
+        payload = json.loads(captured.records[0].getMessage())
+        self.assertEqual(payload["event"], "task_failed")
+        self.assertEqual(payload["attempt"], 3)
+        self.assertEqual(payload["error_type"], "RuntimeError")
+        self.assertNotIn("segredo", captured.records[0].getMessage())
+
+    def test_retry_callback_and_failure_callback_cover_every_dag(self):
+        for dag in self.bag.dags.values():
+            for task in dag.tasks:
+                self.assertTrue(task.on_failure_callback)
+                self.assertTrue(task.on_retry_callback)
+                self.assertTrue(all(callable(cb) for cb in task.on_failure_callback))
+                self.assertTrue(all(callable(cb) for cb in task.on_retry_callback))
+
+    def test_failure_callback_accepts_missing_exception(self):
+        callbacks = self.bag.dags["inflow_freshness"].get_task("verificar_freshness").on_failure_callback
+        with self.assertLogs("inflow.orchestration", level="ERROR") as captured:
+            for callback in callbacks:
+                callback({})
+        self.assertEqual(json.loads(captured.records[0].getMessage())["error_type"], "UnknownError")
 
 
 if __name__ == "__main__":
