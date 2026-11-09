@@ -304,3 +304,44 @@ def maiores_fornecedores(filtros=None, limite=30):
         """,
         f,
     )
+
+
+def _filtros_senador_atual(f):
+    return f"""
+          {_clausula('s.partido_atual', 'partidos', f['partidos'], 'text')}
+          AND {_clausula('s.uf_atual', 'ufs', f['ufs'], 'text')}
+          AND {_clausula('s.senador_id', 'senadores', f['senadores'], 'int')}"""
+
+
+def comissoes_por_senador(filtros=None):
+    """Pergunta 7: comissões com vigência confirmada na data de referência do build dbt."""
+    f = _filtros(filtros)
+    return _consultar(
+        f"""
+        SELECT s.senador_id, s.nome, s.partido_atual, s.uf_atual, g.data_referencia,
+               g.comissoes_com_vigencia_confirmada, g.vinculos_sem_inicio_conhecido
+        FROM analytics_marts.gestao_comissoes_senador g
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE {_filtros_senador_atual(f)}
+        ORDER BY g.comissoes_com_vigencia_confirmada DESC, s.nome
+        """,
+        f,
+    )
+
+
+def estrutura_gabinete(filtros=None):
+    """Pergunta 12: quantitativos anuais de pessoal publicados pelo Senado."""
+    f = _filtros(filtros)
+    return _consultar(
+        f"""
+        SELECT s.senador_id, s.nome, s.partido_atual, s.uf_atual, g.ano,
+               g.qtd_pessoal_gabinete, g.qtd_pessoal_escritorio, g.qtd_total_servidores,
+               g.auxilio_moradia, g.imovel_funcional
+        FROM analytics_marts.fct_estrutura_gabinete g
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE {_clausula('g.ano', 'anos', f['anos'], 'int')}
+          AND {_filtros_senador_atual(f)}
+        ORDER BY g.ano, g.qtd_total_servidores DESC NULLS LAST, s.nome
+        """,
+        f,
+    )

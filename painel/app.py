@@ -191,6 +191,57 @@ def secao_pergunta_13(filtros):
     tabela(df, moeda=["valor_total"])
 
 
+# ---------------------------------------------------------------- Comissões e gabinete
+
+def secao_pergunta_7(filtros):
+    st.header("Pergunta 7: comissões que cada senador integra")
+    df = consultar("comissoes_por_senador", filtros)
+    if sem_dados(df):
+        return
+    referencias = ", ".join(sorted({pd.Timestamp(d).strftime("%d/%m/%Y") for d in df["data_referencia"]}))
+    st.caption(
+        f"Comissões distintas com vínculo vigente em {referencias} (data de referência da última publicação "
+        "dos modelos). Vínculos sem data de início não entram na contagem e aparecem à parte: zero comissões "
+        "confirmadas não prova ausência de vínculo. Partido e UF atuais; o filtro de ano e o de categoria "
+        "não se aplicam."
+    )
+    st.plotly_chart(
+        px.bar(df.head(30), x="comissoes_com_vigencia_confirmada", y="nome", color="partido_atual",
+               orientation="h",
+               labels={"comissoes_com_vigencia_confirmada": "Comissões com vigência confirmada",
+                       "nome": "Senador", "partido_atual": "Partido"},
+               title="Senadores com mais comissões (até 30)")
+        .update_yaxes(autorange="reversed"),
+        width="stretch",
+    )
+    tabela(df)
+
+
+def secao_pergunta_12(filtros):
+    st.header("Pergunta 12: quantitativo de pessoal por senador")
+    st.caption(
+        "Quantitativos anuais publicados pelo Senado (gabinete e escritório de apoio), não cadastro de pessoas. "
+        "Anos não somam pessoas distintas e ano ausente não é zero. Partido e UF atuais; o filtro de categoria "
+        "não se aplica."
+    )
+    df = consultar("estrutura_gabinete", filtros)
+    if sem_dados(df):
+        return
+    ultimo = df[df["ano"] == df["ano"].max()].head(30)
+    barras = ultimo.melt(id_vars="nome", value_vars=["qtd_pessoal_gabinete", "qtd_pessoal_escritorio"],
+                         var_name="lotacao", value_name="pessoas")
+    barras["lotacao"] = barras["lotacao"].map({"qtd_pessoal_gabinete": "Gabinete",
+                                               "qtd_pessoal_escritorio": "Escritório de apoio"})
+    st.plotly_chart(
+        px.bar(barras, x="pessoas", y="nome", color="lotacao", orientation="h",
+               labels={"pessoas": "Pessoas", "nome": "Senador", "lotacao": "Lotação"},
+               title=f"Maiores estruturas em {int(df['ano'].max())} (até 30)")
+        .update_yaxes(autorange="reversed"),
+        width="stretch",
+    )
+    tabela(df)
+
+
 # ---------------------------------------------------------------- Página
 
 st.title("Mandato Aberto")
@@ -235,6 +286,7 @@ filtros = {
 ABAS = {
     "Gastos (CEAPS)": (secao_pergunta_central, secao_pergunta_1, secao_grupos,
                        secao_pergunta_11, secao_gasto_mensal, secao_pergunta_13),
+    "Comissões e gabinete": (secao_pergunta_7, secao_pergunta_12),
 }
 
 for aba, secoes in zip(st.tabs(list(ABAS)), ABAS.values()):
