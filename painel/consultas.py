@@ -1,5 +1,6 @@
 """Consultas do painel: somente leitura, SQL parametrizado, apenas analytics_marts e monitoring."""
 import os
+from decimal import Decimal
 
 import pandas as pd
 import psycopg2
@@ -31,9 +32,14 @@ def _consultar(sql, params=None):
         with conn.cursor() as cur:
             cur.execute(sql, params)
             colunas = [c.name for c in cur.description]
-            return pd.DataFrame(cur.fetchall(), columns=colunas)
+            df = pd.DataFrame(cur.fetchall(), columns=colunas)
     finally:
         conn.close()
+    # NUMERIC chega como Decimal; os gráficos precisam de float.
+    for coluna in df.columns:
+        if df[coluna].map(lambda v: isinstance(v, Decimal)).any():
+            df[coluna] = pd.to_numeric(df[coluna], errors="coerce").astype(float)
+    return df
 
 
 def _filtros(filtros):
@@ -207,6 +213,68 @@ def gasto_mensal(filtros=None):
           AND {_clausula('a.categoria_id', 'categorias', f['categorias'], 'text')}
         GROUP BY a.ano, a.mes, a.competencia
         ORDER BY a.ano, a.mes
+        """,
+        f,
+    )
+
+
+def _filtros_comparacao(f):
+    return f"""
+          {_clausula('c.ano', 'anos', f['anos'], 'int')}
+          AND {_clausula('c.partido_competencia', 'partidos', f['partidos'], 'text')}
+          AND {_clausula('c.uf_competencia', 'ufs', f['ufs'], 'text')}
+          AND {_clausula('c.senador_id', 'senadores', f['senadores'], 'int')}"""
+
+
+def comparacao_resumo(filtros=None):
+    """Pergunta central: por senador e ano, quanto gastou acima/abaixo da média dos pares.
+
+    Soma só diferenças em reais de competências COMPARAVEL; percentuais não são somados.
+    """
+    f = _filtros(filtros)
+    return _consultar(
+        f"""
+        SELECT s.senador_id, s.nome, c.ano,
+               string_agg(DISTINCT c.partido_competencia, ', ') AS partidos_no_ano,
+               string_agg(DISTINCT c.uf_competencia, ', ') AS ufs_no_ano,
+               count(*) AS competencias,
+               sum(c.valor_total) AS valor_total,
+               count(*) FILTER (WHERE c.status_comparacao_partido = 'COMPARAVEL') AS meses_comparaveis_partido,
+               count(*) FILTER (WHERE c.status_comparacao_partido = 'COMPARAVEL' AND c.acima_media_partido)
+                   AS meses_acima_partido,
+               sum(c.diferenca_media_partido) FILTER (WHERE c.status_comparacao_partido = 'COMPARAVEL')
+                   AS diferenca_acumulada_partido,
+               count(*) FILTER (WHERE c.status_comparacao_uf = 'COMPARAVEL') AS meses_comparaveis_uf,
+               count(*) FILTER (WHERE c.status_comparacao_uf = 'COMPARAVEL' AND c.acima_media_uf)
+                   AS meses_acima_uf,
+               sum(c.diferenca_media_uf) FILTER (WHERE c.status_comparacao_uf = 'COMPARAVEL')
+                   AS diferenca_acumulada_uf
+        FROM analytics_marts.gestao_comparacao_despesas_mensais c
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE c.em_exercicio_no_mes
+          AND {_filtros_comparacao(f)}
+        GROUP BY s.senador_id, s.nome, c.ano
+        ORDER BY c.ano, diferenca_acumulada_partido DESC NULLS LAST, s.nome
+        """,
+        f,
+    )
+
+
+def comparacao_mensal(filtros=None):
+    """Pergunta central: uma linha por senador e competência, com estados e pares visíveis."""
+    f = _filtros(filtros)
+    return _consultar(
+        f"""
+        SELECT s.senador_id, s.nome, c.ano, c.mes, c.competencia, c.valor_total, c.dias_exercicio,
+               c.partido_competencia, c.status_comparacao_partido, c.quantidade_pares_partido,
+               c.media_pares_partido, c.diferenca_media_partido, c.desvio_percentual_partido,
+               c.uf_competencia, c.status_comparacao_uf, c.quantidade_pares_uf,
+               c.media_pares_uf, c.diferenca_media_uf, c.desvio_percentual_uf
+        FROM analytics_marts.gestao_comparacao_despesas_mensais c
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE c.em_exercicio_no_mes
+          AND {_filtros_comparacao(f)}
+        ORDER BY c.ano, c.mes, c.valor_total DESC, s.senador_id
         """,
         f,
     )
