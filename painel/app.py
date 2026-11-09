@@ -33,6 +33,15 @@ def sem_dados(df):
     return False
 
 
+def barras_horizontais(df, x, y, titulo, labels, color=None, hover_data=None):
+    """Barras na ordem do DataFrame (não agrupadas por cor) e com todos os rótulos visíveis."""
+    fig = px.bar(df, x=x, y=y, color=color, orientation="h", title=titulo, labels=labels,
+                 hover_data=hover_data, category_orders={y: list(dict.fromkeys(df[y]))},
+                 height=max(320, 26 * df[y].nunique() + 140))
+    fig.update_yaxes(dtick=1)
+    st.plotly_chart(fig, width="stretch")
+
+
 # ---------------------------------------------------------------- Gastos CEAPS
 
 def secao_pergunta_central(filtros):
@@ -59,19 +68,19 @@ def secao_pergunta_central(filtros):
         serie["serie"] = serie["serie"].map(nomes)
         st.plotly_chart(
             px.line(serie, x="periodo", y="valor", color="serie", markers=True,
+                    color_discrete_map={"Senador": "#111827", "Média dos pares do partido": "#2563eb",
+                                        "Média dos pares da UF": "#ea580c"},
                     labels={"periodo": "Competência", "valor": "Gasto (R$)", "serie": ""},
                     title=f"{mensal['nome'].iloc[0]}: gasto mensal e médias dos pares"),
             width="stretch",
         )
     else:
         topo = resumo.dropna(subset=["diferenca_acumulada_partido"]).head(20)
-        st.plotly_chart(
-            px.bar(topo, x="diferenca_acumulada_partido", y="nome", orientation="h", color="partidos_no_ano",
-                   labels={"diferenca_acumulada_partido": "Diferença acumulada vs. pares do partido (R$)",
-                           "nome": "Senador", "partidos_no_ano": "Partido"},
-                   title="Maiores diferenças acumuladas em relação aos pares do partido (até 20)")
-            .update_yaxes(autorange="reversed"),
-            width="stretch",
+        barras_horizontais(
+            topo, "diferenca_acumulada_partido", "nome", color="partidos_no_ano",
+            titulo="Maiores diferenças acumuladas em relação aos pares do partido (até 20)",
+            labels={"diferenca_acumulada_partido": "Diferença acumulada vs. pares do partido (R$)",
+                    "nome": "Senador", "partidos_no_ano": "Partido"},
         )
         st.caption("Selecione um único senador no filtro para ver a série mensal contra as médias dos pares.")
 
@@ -101,12 +110,10 @@ def secao_pergunta_1(filtros):
     df = consultar("media_mensal_senador", filtros)
     if sem_dados(df):
         return
-    st.plotly_chart(
-        px.bar(df.head(30), x="media_mensal", y="nome", color="partido_atual", orientation="h",
-               labels={"media_mensal": "Média mensal (R$)", "nome": "Senador", "partido_atual": "Partido"},
-               title="Maiores médias mensais (até 30 senadores)")
-        .update_yaxes(autorange="reversed"),
-        width="stretch",
+    barras_horizontais(
+        df.head(30), "media_mensal", "nome", color="partido_atual",
+        titulo="Maiores médias mensais (até 30 senadores)",
+        labels={"media_mensal": "Média mensal (R$)", "nome": "Senador", "partido_atual": "Partido"},
     )
     tabela(df, moeda=["valor_total", "media_mensal"])
 
@@ -146,11 +153,11 @@ def secao_pergunta_11(filtros):
     if sem_dados(df):
         return
     resumo = df.groupby("tipo_despesa", as_index=False)["senador_id"].nunique()
-    resumo = resumo.rename(columns={"senador_id": "senadores"}).sort_values("senadores")
-    st.plotly_chart(
-        px.bar(resumo, x="senadores", y="tipo_despesa", orientation="h",
-               labels={"senadores": "Senadores", "tipo_despesa": "Categoria"}),
-        width="stretch",
+    resumo = resumo.rename(columns={"senador_id": "senadores"})
+    barras_horizontais(
+        resumo.sort_values("senadores", ascending=False), "senadores", "tipo_despesa",
+        titulo="Quantos senadores têm cada categoria como a maior",
+        labels={"senadores": "Senadores", "tipo_despesa": "Categoria"},
     )
     tabela(df, moeda=["valor_total", "valor_total_ano"], percentual=["percentual_total_ano"])
 
@@ -180,13 +187,10 @@ def secao_pergunta_13(filtros):
     if sem_dados(df):
         return
     topo = df.head(15).assign(rotulo=lambda d: d["razao_social"].str.slice(0, 45))
-    st.plotly_chart(
-        px.bar(topo, x="valor_total", y="rotulo", orientation="h",
-               hover_data=["documento", "senadores", "quantidade_despesas"],
-               labels={"valor_total": "Valor recebido (R$)", "rotulo": "Fornecedor"},
-               title="Maiores fornecedores (até 15)")
-        .update_yaxes(autorange="reversed"),
-        width="stretch",
+    barras_horizontais(
+        topo, "valor_total", "rotulo", hover_data=["documento", "senadores", "quantidade_despesas"],
+        titulo="Maiores fornecedores (até 15)",
+        labels={"valor_total": "Valor recebido (R$)", "rotulo": "Fornecedor"},
     )
     tabela(df, moeda=["valor_total"])
 
@@ -205,14 +209,11 @@ def secao_pergunta_7(filtros):
         "confirmadas não prova ausência de vínculo. Partido e UF atuais; o filtro de ano e o de categoria "
         "não se aplicam."
     )
-    st.plotly_chart(
-        px.bar(df.head(30), x="comissoes_com_vigencia_confirmada", y="nome", color="partido_atual",
-               orientation="h",
-               labels={"comissoes_com_vigencia_confirmada": "Comissões com vigência confirmada",
-                       "nome": "Senador", "partido_atual": "Partido"},
-               title="Senadores com mais comissões (até 30)")
-        .update_yaxes(autorange="reversed"),
-        width="stretch",
+    barras_horizontais(
+        df.head(30), "comissoes_com_vigencia_confirmada", "nome", color="partido_atual",
+        titulo="Senadores com mais comissões (até 30)",
+        labels={"comissoes_com_vigencia_confirmada": "Comissões com vigência confirmada",
+                "nome": "Senador", "partido_atual": "Partido"},
     )
     tabela(df)
 
@@ -232,12 +233,10 @@ def secao_pergunta_12(filtros):
                          var_name="lotacao", value_name="pessoas")
     barras["lotacao"] = barras["lotacao"].map({"qtd_pessoal_gabinete": "Gabinete",
                                                "qtd_pessoal_escritorio": "Escritório de apoio"})
-    st.plotly_chart(
-        px.bar(barras, x="pessoas", y="nome", color="lotacao", orientation="h",
-               labels={"pessoas": "Pessoas", "nome": "Senador", "lotacao": "Lotação"},
-               title=f"Maiores estruturas em {int(df['ano'].max())} (até 30)")
-        .update_yaxes(autorange="reversed"),
-        width="stretch",
+    barras_horizontais(
+        barras, "pessoas", "nome", color="lotacao",
+        titulo=f"Maiores estruturas em {int(df['ano'].max())} (até 30)",
+        labels={"pessoas": "Pessoas", "nome": "Senador", "lotacao": "Lotação"},
     )
     tabela(df)
 
@@ -296,13 +295,13 @@ col2.caption(f"Modelos atualizados em {formatar(datas['modelos'])}")
 
 with st.sidebar:
     st.header("Filtros")
-    anos = st.multiselect("Ano", opcoes["anos"]["ano"].tolist())
-    partidos = st.multiselect("Partido", opcoes["partidos"]["partido"].tolist())
-    ufs = st.multiselect("UF", opcoes["ufs"]["uf"].tolist())
+    anos = st.multiselect("Ano", opcoes["anos"]["ano"].tolist(), placeholder="Todos")
+    partidos = st.multiselect("Partido", opcoes["partidos"]["partido"].tolist(), placeholder="Todos")
+    ufs = st.multiselect("UF", opcoes["ufs"]["uf"].tolist(), placeholder="Todos")
     nomes_sen = dict(zip(opcoes["senadores"]["senador_id"], opcoes["senadores"]["nome"]))
-    senadores = st.multiselect("Senador", list(nomes_sen), format_func=nomes_sen.get)
+    senadores = st.multiselect("Senador", list(nomes_sen), format_func=nomes_sen.get, placeholder="Todos")
     nomes_cat = dict(zip(opcoes["categorias"]["categoria_id"], opcoes["categorias"]["tipo_despesa"]))
-    categorias = st.multiselect("Categoria", list(nomes_cat), format_func=nomes_cat.get)
+    categorias = st.multiselect("Categoria", list(nomes_cat), format_func=nomes_cat.get, placeholder="Todos")
     st.caption(
         "Sem seleção, o filtro considera todos os valores. Cada seção informa se usa partido/UF "
         "da competência (histórico oficial) ou atuais (cadastro do senador)."
