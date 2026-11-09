@@ -1,0 +1,172 @@
+---
+title: Diário de bordo — Entrega 3
+sidebar_label: Diário de bordo (E3)
+sidebar_position: 4
+---
+
+# Diário de bordo — Entrega 3 — Mandato Aberto
+
+**Grupo:** 11 — Banco de Dados 2 / UnB
+
+**Atualizado em:** 08/11/2026
+
+## Escopo
+
+Registro inicial da **E3 — Camada analítica transformada, testada e orquestrada**, em
+continuidade à [Entrega 2](./03-diario-de-bordo-semanas-7-a-10.mdx). Esta primeira versão
+registra o trabalho conjunto de **Ana Luiza e Danilo Naves** na frente de modelagem e
+transformações, integrado à `develop` pelo [PR #35](https://github.com/DaniloNavesS/inflow/pull/35).
+
+O [enunciado da E3](https://github.com/UnB-BD2/PlanoEnsino/blob/main/_entregas/e3.md)
+orienta a construção de modelos dimensionais, transformações declarativas, testes,
+orquestração e consumo que responda à pergunta da E1. A frente de modelagem entrega os
+dados e suas regras; isso não significa que todas as frentes da E3 estejam concluídas.
+
+:::note[Registro em construção]
+
+As contribuições de orquestração, qualidade, otimização e painel serão preenchidas pelos
+responsáveis com suas atividades e evidências. Um campo “a preencher” indica ausência do
+registro nesta página, não ausência de trabalho do integrante.
+
+:::
+
+## Contribuições dos integrantes
+
+| Integrante | Contribuições registradas na E3 |
+|---|---|
+| Ana Luiza — @Ana-Luiza-SC | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
+| Danilo Naves — @DaniloNavesS | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
+| Yzabella Miranda — @redjsun | — A preencher: atividades e evidências da frente de orquestração. |
+| Manuella Valadares — @manuvaladares | — A preencher: atividades e evidências da frente de orquestração. |
+| Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
+| Vilmar Fagundes — @VilmarFagundes | — A preencher: atividades e evidências da frente de otimização. |
+| Yan Guimarães — @yanzin00 | — A preencher: atividades e evidências da frente do painel. |
+
+## Semana de 2 a 8/11 — modelagem e transformações
+
+### Atividades de 6/11
+
+**Ana e Danilo** organizaram a transformação com dbt em schemas próprios do PostgreSQL,
+sem substituir a ingestão e o lake existentes. Foram criadas as camadas de preparação e
+consumo, a fato de despesas por lançamento, as dimensões de senador, fornecedor, categoria
+e calendário e as agregações mensais.
+
+O trabalho incluiu um snapshot de fornecedores para preservar mudanças de documento e
+razão social. A reexecução, a correção de cadastro e a exclusão foram verificadas em banco
+descartável, distinguindo histórico observado de cadastro vigente na data de uma despesa.
+
+A frente também entregou os modelos de comissões e gabinete, com granularidades próprias,
+e a contagem de presenças documentadas no DSF. Os registros parciais e sem identidade
+foram preservados, sem produzir ausências ou uma taxa de assiduidade artificial.
+
+Na execução local, a gravação dos artefatos pelo contêiner como root provocou erro na
+limpeza. A configuração passou a usar UID/GID do usuário, com preparação dos diretórios
+e validação de escrita, edição e remoção sem sudo, inclusive com UID/GID alternativos.
+
+### Atividades de 8/11
+
+**Ana e Danilo** confrontaram os modelos com a pergunta central da E1. A estrutura
+inicial cobria as métricas de gastos, mas ainda faltava a comparação por partido e UF.
+O cadastro atual não era suficiente para classificar despesas de 2024.
+
+Foi criado um contexto mensal a partir dos mandatos, exercícios e filiações oficiais,
+versionado em um seed dbt. A comparação passou a usar outros senadores com lançamentos
+na mesma competência e classificação histórica unívoca. Mudanças de partido, grupos sem
+pares e médias zero receberam estados explícitos, preservando os valores das despesas.
+
+O detalhamento mensal por categoria e fornecedor completou a composição da pergunta
+central. As consultas, o catálogo e os contratos de consumo foram atualizados, e o
+trabalho foi integrado à `develop` pelo PR #35. O [ADR 0004](/docs/adr/modelagem-dimensional-com-dbt)
+formaliza as alternativas, a decisão, as consequências e os gatilhos de revisão.
+
+### O que foi medido
+
+| Verificação da frente de modelagem | Resultado registrado |
+|---|---|
+| Despesas e reconciliação monetária | 21.430 lançamentos e R$ 32.290.271,35 preservados |
+| Grão mensal por senador | 974 competências com lançamentos |
+| Detalhamento mensal por categoria e fornecedor | 13.404 linhas, com o mesmo total monetário |
+| Contexto histórico de 2024 | 88 senadores e 1.056 competências versionadas |
+| Comparação partidária | 938 competências comparáveis; 5 com múltiplos partidos, 27 sem pares e 4 sem exercício confirmado |
+| Comparação por UF | 970 competências comparáveis e 4 sem exercício confirmado |
+| Modelos institucionais | 425 comissões, 7.189 participações e 81 registros anuais de gabinete preservados |
+| Presença documental | 3 sessões, 3 documentos e 220 registros preservados, incluindo 2 identidades não resolvidas |
+| Regra conservadora de presença | 70 registros aceitos; 150 de documentos parciais mantidos fora da contagem |
+| Validação das transformações | 60 testes dbt aprovados na base real e isolada, mais 7 testes Python do contexto |
+| Permissões locais | Publicação e catálogo executados como usuário local; artefatos editáveis e removíveis sem sudo |
+
+Os números descrevem a carga e os cenários validados nesta implementação. Não são
+limites fixos para novas cargas nem medições de desempenho. Os testes da frente verificam
+as transformações; não substituem a suíte ampla de qualidade de dados.
+
+### O que surpreendeu ou exigiu ajuste
+
+- Datas fiscais inválidas poderiam deslocar a competência se o mês fosse derivado delas.
+- Histórico do Delta e histórico observado de fornecedor não substituem a filiação vigente
+  de um parlamentar em 2024; cada tipo de histórico responde a uma pergunta diferente.
+- A primeira implementação não respondia à comparação central por partido e UF. A revisão
+  da pergunta levou à inclusão do contexto oficial, sem recorrer ao cadastro atual.
+- Documentos distintos podem repetir a mesma sessão. Contar linhas em vez de sessões
+  distintas duplicaria presenças.
+- Executar dbt como root deixava artefatos locais sem permissão de limpeza pelo usuário.
+
+### O que foi decidido
+
+- Manter o PostgreSQL como destino dos marts, com dbt e camadas separadas do OLTP.
+- Preservar fatos detalhados e mensais, com grão declarado e valores reconciliados.
+- Guardar mudanças observadas de fornecedor com SCD tipo 2.
+- Comparar competências usando outros senadores do grupo com lançamentos, sem preencher
+  meses ausentes com zero e sem atribuir arbitrariamente um partido a meses de transição.
+- Preservar as evidências documentais de presença e deixar as limitações de cobertura
+  explícitas para os consumidores.
+- Entregar comandos, catálogo e contratos às demais frentes, sem declarar agendamento,
+  freshness, SLA, otimização ou painel como concluídos por este trabalho.
+
+### Evidências por grupo
+
+#### Modelagem e transformações — Ana e Danilo
+
+- [PR #35 — integração da modelagem](https://github.com/DaniloNavesS/inflow/pull/35).
+- [dbt, fatos, dimensões e histórico](https://github.com/DaniloNavesS/inflow/commit/5a71a84).
+- [Testes isolados e comandos de execução](https://github.com/DaniloNavesS/inflow/commit/f0033db).
+- [Comissões e estrutura de gabinete](https://github.com/DaniloNavesS/inflow/commit/74cce52).
+- [Execução com UID/GID local](https://github.com/DaniloNavesS/inflow/commit/d7b406e).
+- [Presenças documentais](https://github.com/DaniloNavesS/inflow/commit/4b6ee65).
+- [Contexto histórico mensal](https://github.com/DaniloNavesS/inflow/commit/9b9742f).
+- [Comparação da pergunta central](https://github.com/DaniloNavesS/inflow/commit/ebe90f5).
+- [Guia e contratos dos modelos](/docs/modelagem-dbt).
+- [ADR 0004 — decisão de modelagem dimensional](/docs/adr/modelagem-dimensional-com-dbt).
+
+#### Orquestração — Yzabella e Manuella
+
+— A preencher: PRs, commits e demonstrações de agendamento, dependências, retry,
+backfill, freshness e SLA.
+
+#### Qualidade — Victor
+
+— A preencher: PRs, commits e resultados da suíte de qualidade de dados.
+
+#### Otimização — Vilmar
+
+— A preencher: PRs, commits, planos de execução antes/depois e comparação de granularidades.
+
+#### Painel — Yan
+
+— A preencher: PRs, commits e demonstração do painel conectado aos modelos analíticos.
+
+## Demais frentes — a preencher
+
+| Frente | Atividades | O que foi medido | Decisões e evidências |
+|---|---|---|---|
+| Orquestração — Yzabella e Manuella | — A preencher | — A preencher | — A preencher |
+| Qualidade — Victor | — A preencher | — A preencher | — A preencher |
+| Otimização — Vilmar | — A preencher | — A preencher | — A preencher |
+| Painel — Yan | — A preencher | — A preencher | — A preencher |
+
+## Continuidade
+
+Os modelos e suas regras estão disponíveis para integração. Os próximos registros devem
+reunir as execuções e evidências das demais frentes, além da validação conjunta da E3.
+A publicação desta página não encerra a entrega: retry e backfill demonstrados, testes
+complementares, planos de execução, freshness/SLA e painel precisam dos registros dos
+respectivos responsáveis.
