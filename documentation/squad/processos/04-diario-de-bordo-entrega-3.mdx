@@ -40,7 +40,7 @@ registro nesta página, não ausência de trabalho do integrante.
 | Manuella Valadares — @manuvaladares | — A preencher: atividades e evidências da frente de orquestração. |
 | Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
 | Vilmar Fagundes — @VilmarFagundes | Otimização: consulta do painel por senador otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais; script de medição reproduzível e ADR 0005. |
-| Yan Guimarães — @yanzin00 | — A preencher: atividades e evidências da frente do painel. |
+| Yan Guimarães — @yanzin00 | Painel Streamlit conectado a `analytics_marts`: pergunta central com médias dos pares, perguntas 1, 4, 10, 11 e 13 (parcial), comissões, gabinete e presenças documentadas, com filtros, datas de coleta e de modelos e testes contra os marts. |
 
 ## Semana de 2 a 8/11 — modelagem e transformações
 
@@ -155,7 +155,8 @@ backfill, freshness e SLA.
 
 #### Painel — Yan
 
-— A preencher: PRs, commits e demonstração do painel conectado aos modelos analíticos.
+- [Guia do painel: como executar, perguntas, modelos, limitações e telas](/docs/painel).
+- Código em `painel/`, testes em `tests/painel/` e comandos `make painel` e `make test-painel`.
 
 ## Demais frentes — a preencher
 
@@ -164,7 +165,7 @@ backfill, freshness e SLA.
 | Orquestração — Yzabella e Manuella | — A preencher | — A preencher | — A preencher |
 | Qualidade — Victor | — A preencher | — A preencher | — A preencher |
 | Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
-| Painel — Yan | — A preencher | — A preencher | — A preencher |
+| Painel — Yan | Painel em abas (gastos, comissões e gabinete, presença) sobre os marts do dbt, com conexão somente leitura; perguntas 4 e 10 refeitas com o partido/UF da competência; correção do teste `competencias_sem_lacunas`, que impedia a publicação dos marts | `make test-painel`: consultas conferidas contra SQL direto nos marts, médias de 4 e 10 recalculadas a partir dos lançamentos e renderização de todas as abas | Streamlit versionado no Git em vez de BI externo; média de grupo por senador-mês; competências fora do cálculo exibidas, não descartadas; [guia do painel](/docs/painel) |
 
 ## Continuidade
 
