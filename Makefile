@@ -48,6 +48,8 @@ help:
 		'  make quality-report   Resume por dimensão a última execução do dbt (build ou test)' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
+		'  make painel           Sobe o painel Streamlit em http://localhost:8501' \
+		'  make painel-stop      Para o painel Streamlit' \
 		'  make docs             Serve a documentação' \
 		'  make docs-build       Constrói a imagem da documentação' \
 		'  make db-shell         Abre o psql' \
@@ -216,3 +218,11 @@ CONTEXT_YEAR ?= 2024
 .PHONY: models-context
 models-context: start
 	python3 scripts/modeling/atualizar_contexto.py --ano $(CONTEXT_YEAR)
+
+.PHONY: painel painel-stop
+painel: start
+	$(COMPOSE) --profile painel up -d --build --wait painel
+	@echo "Painel em http://localhost:8501"
+
+painel-stop:
+	$(COMPOSE) --profile painel stop painel
