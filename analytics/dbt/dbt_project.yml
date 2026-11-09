@@ -1,0 +1,35 @@
+name: mandato_aberto
+version: '1.0.0'
+config-version: 2
+profile: mandato_aberto
+model-paths: [models]
+snapshot-paths: [snapshots]
+test-paths: [tests]
+models:
+  mandato_aberto:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+seed-paths: [seeds]
+seeds:
+  mandato_aberto:
+    +schema: contexto
+    contexto_parlamentar:
+      +column_types:
+        senador_id: integer
+        ano: integer
+        mes: integer
+        dias_exercicio: integer
+        partido_competencia: text
+        uf_competencia: text
+        status_partido: text
+        status_uf: text
+        source_url: text
+        fonte_sha256: text
+        coletado_em: timestamp with time zone

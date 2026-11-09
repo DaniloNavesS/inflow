@@ -88,6 +88,35 @@ services:
     networks:
       - inflow_network
 
+  modeling:
+    profiles: ["modeling"]
+    build:
+      context: .
+      dockerfile: analytics/dbt/Dockerfile
+    user: "${MODELING_UID:-1000}:${MODELING_GID:-1000}"
+    volumes:
+      - type: bind
+        source: ./analytics/dbt/target
+        target: /app/dbt/target
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./analytics/dbt/logs
+        target: /app/dbt/logs
+        bind:
+          create_host_path: false
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
   benchmark-real:
     profiles: ["benchmark"]
     build:

@@ -1,5 +1,9 @@
 COMPOSE=docker compose
 
+# Nomes próprios: não reutilizar UID/GID do shell.
+export MODELING_UID ?= $(shell id -u)
+export MODELING_GID ?= $(shell id -g)
+
 .DEFAULT_GOAL := help
 
 .PHONY: help start down stop restart ps logs ingestion test cnpj-test build-ingestion cnpj migrate-cnpj migrate-cdc migrate-janela janela janela-reset janela-test cdc-up cdc-register cdc-status cdc-test cdc-semantics cdc-replay-demo build-analytics lake-check lake-parquet test-lake docs docs-build db-shell clean
@@ -36,6 +40,10 @@ help:
 		'  make lake             Materializa Parquet/Delta e compara consultas com o PostgreSQL' \
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
+		'  make models           Publica os modelos dimensionais com dbt' \
+		'  make models-docs      Gera catálogo e linhagem dos modelos dbt' \
+		'  make models-context   Atualiza contexto histórico oficial do ano (padrão 2024)' \
+		'  make test-models      Valida os modelos em PostgreSQL descartável' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
 		'  make docs             Serve a documentação' \
@@ -176,3 +184,21 @@ db-shell:
 
 clean:
 	$(COMPOSE) down -v
+
+.PHONY: models models-docs models-prepare test-models
+models-prepare:
+	mkdir -p analytics/dbt/target analytics/dbt/logs
+
+models: start models-prepare
+	$(COMPOSE) run --build --rm modeling build
+
+test-models:
+	bash tests/modeling/run.sh
+
+models-docs: start models-prepare
+	$(COMPOSE) run --build --rm modeling docs generate
+
+CONTEXT_YEAR ?= 2024
+.PHONY: models-context
+models-context: start
+	python3 scripts/modeling/atualizar_contexto.py --ano $(CONTEXT_YEAR)

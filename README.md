@@ -139,3 +139,14 @@ monitoring
 ## Documentação
 
 A documentação completa do projeto, arquitetura, ADRs, modelo de dados e decisões técnicas está disponível no GitHub Pages do projeto.
+
+### Modelagem dimensional
+
+Após a ingestão, `make models` executa o dbt no PostgreSQL e publica fatos, dimensões,
+agregações mensais e histórico de fornecedores. `make test-models` valida a transformação
+em banco descartável. Veja os [contratos e limites da modelagem](documentation/docs/modelagem-dbt.mdx).
+
+A pergunta central de 2024 tem consultas em `scripts/sql/analytics/001_pergunta_central.sql`:
+gastos mensais, composição por categoria/fornecedor e comparação com outros senadores do
+mesmo partido e UF históricos. O contexto oficial de 2024 está versionado; para atualizar
+ou incluir outro ano, use `make models-context CONTEXT_YEAR=2024` antes de `make models`.

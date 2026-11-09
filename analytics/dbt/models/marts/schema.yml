@@ -1,0 +1,190 @@
+version: 2
+models:
+  - name: dim_senador
+    description: Cadastro atual do senador; partido e UF não são históricos.
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
+  - name: dim_fornecedor
+    description: Cadastro atual, preservando a identidade da origem inclusive sem documento.
+    columns:
+      - name: fornecedor_id
+        tests: [unique, not_null]
+  - name: dim_categoria_despesa
+    columns:
+      - name: categoria_id
+        tests: [unique, not_null]
+  - name: dim_calendario
+    columns:
+      - name: data_id
+        tests: [unique, not_null]
+  - name: dim_fornecedor_historico
+    description: SCD tipo 2 por mudanças observadas; intervalos [observado_desde, observado_ate).
+    columns:
+      - name: fornecedor_versao_id
+        tests: [unique, not_null]
+      - name: fornecedor_id
+        tests: [not_null]
+      - name: observado_desde
+        tests: [not_null]
+  - name: fct_despesas
+    description: Uma linha por lançamento CEAPS. Valor em reais; ano e mês são competência da origem.
+    columns:
+      - name: despesa_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: fornecedor_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_fornecedor')
+                field: fornecedor_id
+      - name: categoria_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_categoria_despesa')
+                field: categoria_id
+      - name: competencia
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: data_calendario
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: valor
+        tests: [not_null]
+  - name: gestao_maior_categoria
+    description: Categorias empatadas no maior gasto anual, com participação percentual no total CEAPS do senador.
+    columns:
+      - name: valor_total_ano
+        description: Soma de todas as categorias do senador no ano de competência.
+      - name: percentual_total_ano
+        description: Percentual entre 0 e 100; nulo quando o total anual é zero.
+  - name: gestao_media_mensal
+    description: Média dos totais mensais por senador e ano, contando somente meses com despesas.
+    columns:
+      - name: meses_com_despesas
+        description: Quantidade de competências com lançamentos, inclusive lançamentos de valor zero.
+      - name: media_mensal
+        description: Valor total anual dividido pelos meses com despesas, em reais.
+  - name: dim_comissao
+    description: Cadastro de comissões do Senado e do Congresso.
+    columns:
+      - name: comissao_id
+        tests: [unique, not_null]
+  - name: fct_participacoes_comissao
+    description: Uma linha por participação da origem; cargos múltiplos não equivalem a comissões distintas.
+    columns:
+      - name: participacao_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: comissao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_comissao')
+                field: comissao_id
+  - name: fct_estrutura_gabinete
+    description: Um retrato de quantitativos por senador e ano da origem, sem identificar pessoas.
+    columns:
+      - name: estrutura_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+  - name: gestao_comissoes_senador
+    description: Contagem distinta de comissões com vigência conhecida na referência; vínculos sem início são reportados separadamente.
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
+  - name: dim_sessao_plenaria
+    description: Sessões coletadas; a amostra não equivale à totalidade de sessões de uma legislatura.
+    columns:
+      - name: sessao_id
+        tests: [unique, not_null]
+  - name: dim_documento_dsf
+    description: Documentos do DSF com proveniência, páginas e status do parser, incluindo PARCIAL e FALHA.
+    columns:
+      - name: documento_dsf_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+  - name: fct_registros_presenca
+    description: Uma linha por registro documental original; não cria ausências e preserva identidades não resolvidas.
+    columns:
+      - name: registro_presenca_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+      - name: documento_dsf_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_documento_dsf')
+                field: documento_dsf_id
+      - name: senador_id
+        description: Pode ser nulo se a identidade não foi resolvida na origem.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: apto_contagem
+        description: Presença com resolução EXATA, documento SUCESSO e sessão consistente; independe da marca de voto.
+  - name: gestao_presencas_documentadas
+    description: Sessões distintas com presença documentada por senador e ano da sessão; não é taxa de comparecimento.
+  - name: dim_contexto_parlamentar_mensal
+    description: Partido e UF oficiais unívocos durante os dias em exercício da competência; conflitos e lacunas são explícitos.
+    columns:
+      - name: contexto_id
+        tests: [unique, not_null]
+      - name: status_partido
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['UNICO', 'MULTIPLOS', 'SEM_COBERTURA', 'SEM_EXERCICIO']
+  - name: fct_despesas_mensais
+    description: Uma linha por senador e competência com lançamentos, inclusive totais zero; ausência de lançamento não vira zero.
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+  - name: gestao_comparacao_despesas_mensais
+    description: Gasto mensal comparado à média dos outros senadores do mesmo partido e UF históricos, na mesma competência.
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+      - name: media_pares_partido
+        description: Exclui o próprio senador; nula se o contexto não é unívoco ou não existem pares com lançamentos.
+      - name: desvio_percentual_partido
+        description: 100 vezes a diferença sobre a média dos pares; nulo se a média é zero ou inexistente. Não classifica atipicidade ou irregularidade.
