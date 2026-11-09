@@ -50,6 +50,7 @@ help:
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
 		'  make painel           Sobe o painel Streamlit em http://localhost:8501' \
 		'  make painel-stop      Para o painel Streamlit' \
+		'  make test-painel      Confere as consultas do painel contra os marts publicados' \
 		'  make docs             Serve a documentação' \
 		'  make docs-build       Constrói a imagem da documentação' \
 		'  make db-shell         Abre o psql' \
@@ -219,10 +220,14 @@ CONTEXT_YEAR ?= 2024
 models-context: start
 	python3 scripts/modeling/atualizar_contexto.py --ano $(CONTEXT_YEAR)
 
-.PHONY: painel painel-stop
+.PHONY: painel painel-stop test-painel
 painel: start
 	$(COMPOSE) --profile painel up -d --build --wait painel
 	@echo "Painel em http://localhost:8501"
 
 painel-stop:
 	$(COMPOSE) --profile painel stop painel
+
+test-painel: start
+	$(COMPOSE) --profile painel run --build --rm -v ./tests/painel:/tests/painel:ro painel \
+		python -m pytest -v -p no:cacheprovider /tests/painel
