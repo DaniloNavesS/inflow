@@ -164,3 +164,27 @@ models:
         description: Presença com resolução EXATA, documento SUCESSO e sessão consistente; independe da marca de voto.
   - name: gestao_presencas_documentadas
     description: Sessões distintas com presença documentada por senador e ano da sessão; não é taxa de comparecimento.
+  - name: dim_contexto_parlamentar_mensal
+    description: Partido e UF oficiais unívocos durante os dias em exercício da competência; conflitos e lacunas são explícitos.
+    columns:
+      - name: contexto_id
+        tests: [unique, not_null]
+      - name: status_partido
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['UNICO', 'MULTIPLOS', 'SEM_COBERTURA', 'SEM_EXERCICIO']
+  - name: fct_despesas_mensais
+    description: Uma linha por senador e competência com lançamentos, inclusive totais zero; ausência de lançamento não vira zero.
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+  - name: gestao_comparacao_despesas_mensais
+    description: Gasto mensal comparado à média dos outros senadores do mesmo partido e UF históricos, na mesma competência.
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+      - name: media_pares_partido
+        description: Exclui o próprio senador; nula se o contexto não é unívoco ou não existem pares com lançamentos.
+      - name: desvio_percentual_partido
+        description: 100 vezes a diferença sobre a média dos pares; nulo se a média é zero ou inexistente. Não classifica atipicidade ou irregularidade.

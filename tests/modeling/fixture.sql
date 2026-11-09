@@ -32,3 +32,6 @@ INSERT INTO oltp.registro_presenca (id, sessao_id, documento_dsf_id, senador_id,
 (6, 1, 1, 2, 'Teste zero', 'TESTE', 'SP', 'DESCONHECIDO', NULL, 1, 'EXATA'),
 (7, 3, 1, 1, 'Sessão inconsistente', 'ANTIGO', 'DF', 'PRESENTE', true, 1, 'EXATA'),
 (8, 2, 2, NULL, 'Identificação ambígua', NULL, NULL, 'PRESENTE', NULL, 1, 'AMBIGUA');
+INSERT INTO oltp.senadores (id,nome,partido,uf) VALUES (3,'Sem contexto histórico','ATUAL','DF');
+INSERT INTO oltp.despesas (id,senador_id,fornecedor_id,ano,mes,data_despesa,tipo_despesa,valor)
+VALUES (5,3,1,2024,1,'2024-01-01','Outros',900);

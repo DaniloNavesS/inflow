@@ -17,6 +17,8 @@ services:
     build:
       context: ../..
       dockerfile: analytics/dbt/Dockerfile
+    volumes:
+      - ./contexto_parlamentar.csv:/app/dbt/seeds/contexto_parlamentar.csv:ro
     environment:
       DB_HOST: postgres
       DB_NAME: modeling_test

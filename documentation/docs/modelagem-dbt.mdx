@@ -78,9 +78,9 @@ anteriores ao início da observação. Para consultar um retrato cadastral obser
 `observado_desde <= instante` e `(observado_ate > instante OR observado_ate IS NULL)`.
 
 As migrações antigas de mandatos e filiações não são fontes deste projeto dbt: o caminho
-atual de ingestão não as preenche. Partido histórico exige integração específica futura;
-não é inferido do cadastro atual. O histórico de fornecedores atende o requisito da
-entrega sem essa dependência.
+atual de ingestão não as preenche. A classificação histórica mensal usa o seed oficial
+descrito na seção da pergunta central, sem inferência do cadastro atual. O histórico de
+fornecedores é independente e atende ao requisito de dimensão de variação lenta.
 
 O snapshot é persistente: não apagar `analytics_history` entre execuções. Os demais
 modelos são reconstruídos integralmente, opção proporcional ao volume atual. O comando
@@ -288,8 +288,9 @@ Os dados são base documental para a frente do painel, sem afirmar cobertura das
 | 7: comissões por senador | Implementada por referência temporal, com limites de cobertura explicitados |
 | 12: quantitativo de pessoal | Fato anual implementada, preservando os quantitativos publicados |
 | 5 e 6: taxas de presença | Evidência documental modelada; taxa depende de cobertura e elegibilidade ainda ausentes |
-| 4 e 8: despesas/vagas por partido vigente | Dependem de integração histórica de filiações, sem substituição pelo partido atual |
-| 10: média por UF | UF atual disponível; atribuição histórica ainda não implementada |
+| Pergunta central: gastos e comparação com partido/UF | Implementada mensalmente com contexto oficial, pares explícitos e detalhamento por fornecedor/categoria |
+| 4 e 10: médias por partido e UF | Contexto mensal histórico e totais disponíveis para os grupos com classificação unívoca; definir o recorte no consumo |
+| 8: vagas por partido vigente | Ainda exige regra de vagas e atribuição temporal dos vínculos em comissões |
 | 9: votos nominais abertos | Indicador documental de voto não atende a granularidade de voto nominal |
 | 13: donos de fornecedores | Vínculos empresariais ainda não transformados em marts dbt |
 | 2 e 3: atipicidade por LLM | Classificação não é produzida pelos modelos atuais |
@@ -305,3 +306,116 @@ aceitou 70 registros do documento `SUCESSO`; outros 150 pertencem a dois documen
 sessões inconsistentes nessa amostra real. Os cenários sintéticos cobrem essa inconsistência,
 repetição de sessão em documentos distintos, presença sem voto e documentos sem linhas.
 A execução completa passou por 51 verificações dbt na base real e no ambiente isolado.
+
+## Pergunta central: comparação mensal por partido e UF
+
+A pergunta central da E1 é atendida pelo detalhamento mensal e pelo modelo
+`gestao_comparacao_despesas_mensais`. A classificação usa o histórico oficial de
+mandatos, exercício e filiações do Senado, sem atribuir o partido ou a UF atuais a
+uma despesa de 2024. O contexto é um recorte mensal versionado como seed dbt em
+`analytics/dbt/seeds/contexto_parlamentar.csv`, não uma nova infraestrutura de ingestão.
+
+### Regras decididas
+
+1. A unidade de comparação é **senador × competência CEAPS**. Somam-se as categorias
+   sem derivar competência da data fiscal, que pode estar errada. Não se somam médias.
+2. Os pares são **outros senadores com lançamentos na mesma competência**, em exercício
+   em pelo menos um dia do mês e com partido ou UF históricos unívocos. O próprio senador
+   é excluído da média. Meses sem lançamento não viram despesa zero; lançamento de valor
+   zero participa normalmente. A média não representa todos os ocupantes das 81 cadeiras.
+3. Partido é determinado pelos intervalos de filiação; UF pelos mandatos. A fonte é
+   [mandatos do Senado](https://legis.senado.leg.br/dadosabertos/senador/22/mandatos.json),
+   que inclui intervalos de exercício e partidos de cada mandato. Os limites publicados
+   são inclusivos. Exercício sem fim publicado é limitado ao fim do mandato.
+4. A classificação precisa ser única em **todos os dias em exercício do mês**. Troca de
+   partido no mês recebe `MULTIPLOS` e não participa da comparação partidária daquele mês;
+   ainda pode participar da comparação por UF. Lacunas recebem `SEM_COBERTURA`. Não se
+   escolhe arbitrariamente o partido do último dia nem se rateiam despesas entre partidos.
+5. A comparação usa o total mensal observado, sem projetar ou dividir por dias em exercício.
+   `dias_exercicio` fica disponível para interpretar meses parciais. A referência mede
+   diferença de gasto, não eficiência, irregularidade, fraude ou atipicidade por LLM.
+6. Grupo sem outros senadores recebe `SEM_PARES`: média, diferença e percentual são nulos.
+   Se a média dos pares for zero, a diferença em reais continua disponível e o percentual
+   é nulo. Nulo nunca é apresentado como desvio zero.
+7. Competências sem contexto recebem `NAO_COLETADO`; sem dias de exercício confirmado,
+   `SEM_EXERCICIO`. Seus valores permanecem nas fatos e na tabela de comparação, com
+   estados explícitos e métricas nulas. Os pares de partido e UF são resolvidos separadamente.
+
+O cadastro atual de senador serve para nome e identificação. Não é fonte de partido/UF
+para esses cálculos. Os estados históricos mensais também não atribuem partido a cada
+lançamento fiscal individual: a classificação corresponde à competência CEAPS.
+
+### Modelos de consumo
+
+| Modelo em `analytics_marts` | Granularidade e uso |
+|---|---|
+| `dim_contexto_parlamentar_mensal` | Senador × ano × mês, com dias de exercício, classificação, URL, SHA-256 e data de coleta |
+| `fct_despesas_mensais` | Senador × competência com lançamentos, com total e contexto preservando todos os valores |
+| `gestao_comparacao_despesas_mensais` | Mesmo grão, com média dos pares, quantidade de pares, diferença em reais, percentual e estado de comparação |
+| `agg_despesas_mensais_fornecedor_categoria` | Senador × competência × fornecedor × categoria, para detalhar a composição sem duplicar despesas |
+
+`diferenca_media_partido = valor_total - media_pares_partido` e
+`desvio_percentual_partido = 100 * diferenca_media_partido / media_pares_partido`;
+as mesmas fórmulas valem para UF. `acima_media_*` é um indicador aritmético, não uma
+classificação de anomalia. Não somar os valores mensais após juntá-los ao detalhamento
+por categoria/fornecedor, pois o total mensal se repetiria em cada linha detalhada.
+
+O arquivo `scripts/sql/analytics/001_pergunta_central.sql` entrega as consultas prontas
+para comparar senadores em exercício no recorte de 2024, detalhar categorias/fornecedores
+e auditar os estados do contexto. O painel deve apresentar os estados e denominadores
+junto às métricas, inclusive grupos sem pares e mudanças de partido.
+
+### Reproduzir e atualizar o contexto
+
+O seed incluído cobre os 88 senadores com despesas na carga real de 2024 e contém
+1.056 competências. `make models` carrega esse recorte pelo dbt sem novas chamadas HTTP.
+Sua geração é automatizada e reproduzível:
+
+```bash
+# Atualiza apenas o ano solicitado a partir dos IDs de despesas do PostgreSQL local.
+make models-context CONTEXT_YEAR=2024
+make models
+make models-docs
+
+# Reprocessa exatamente as respostas locais sem HTTP, quando disponíveis.
+python3 scripts/modeling/atualizar_contexto.py --ano 2024 --usar-cache
+```
+
+O script usa somente a biblioteca padrão Python, consulta os IDs via Compose, coleta os
+mandatos em até quatro conexões e preserva as respostas em
+`resultados/contexto-parlamentar/<ano>/<senador>.json` (ignorado pelo Git). A URL e o hash
+da resposta ficam em cada linha do seed. Identidade divergente ou intervalo inválido
+interrompem a atualização; o arquivo anterior só é substituído após processar todos os
+senadores com sucesso. Anos já versionados diferentes do solicitado são preservados.
+
+A tabela versionada é um **recorte conhecido da fonte**, não uma garantia de que o
+Senado nunca fará correções. Ao mudar o ano ou adicionar senadores, atualizar o contexto
+antes de publicar os marts e revisar o diff do seed. Não se reaproveita 2024 para inferir
+outros anos. O comando é disponibilizado para a frente de orquestração, sem implementar
+agendamento, retry do pipeline ou SLA nesta frente.
+
+As perguntas 4 e 10 podem explorar as competências
+com contexto unívoco, respeitando a população com lançamentos. As perguntas 2 e 3 de
+classificação por LLM e a pergunta 8 de vagas em comissões continuam fora desta implementação.
+
+### Evidência da comparação na base real
+
+A publicação preservou os 21.430 lançamentos e R$ 32.290.271,35 em 974 competências
+com despesas. Destas, 938 tiveram comparação partidária válida; 5 tiveram múltiplos
+partidos nos dias em exercício, 27 não tiveram outros pares do partido e 4 não tiveram
+exercício no mês confirmado. Para UF, 970 foram comparáveis e 4 ficaram sem exercício.
+As quatro competências fora de exercício permanecem auditáveis e não entram na consulta
+principal de senadores em exercício; não se apagam despesas pagas fora desse intervalo.
+
+As médias foram verificadas por uma consulta independente no OLTP, com autojunção entre
+pares e exclusão explícita do próprio senador, além da reconciliação integral dos valores.
+A suíte dbt passou com 60 verificações na base real e no banco isolado. Sete cenários Python
+verificam intervalos, troca de partido, lacuna de filiação, duplicação de exercícios,
+identidade divergente e gravação atômica/legível do seed. O catálogo foi atualizado.
+
+## Decisão e acompanhamento da E3
+
+A escolha de modelagem, ferramenta, granularidades e histórico está formalizada no
+[ADR 0004](./adr/0004-modelagem-dimensional-com-dbt.md). O
+[diário inicial da E3](/squad/processos/diario-de-bordo-entrega-3) registra o trabalho
+de Ana e Danilo e mantém espaços para as evidências das demais frentes.

@@ -42,6 +42,7 @@ help:
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make models           Publica os modelos dimensionais com dbt' \
 		'  make models-docs      Gera catálogo e linhagem dos modelos dbt' \
+		'  make models-context   Atualiza contexto histórico oficial do ano (padrão 2024)' \
 		'  make test-models      Valida os modelos em PostgreSQL descartável' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
@@ -196,3 +197,8 @@ test-models:
 
 models-docs: start models-prepare
 	$(COMPOSE) run --build --rm modeling docs generate
+
+CONTEXT_YEAR ?= 2024
+.PHONY: models-context
+models-context: start
+	python3 scripts/modeling/atualizar_contexto.py --ano $(CONTEXT_YEAR)

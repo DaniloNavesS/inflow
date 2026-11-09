@@ -1,0 +1,4 @@
+senador_id,ano,mes,dias_exercicio,partido_competencia,uf_competencia,status_partido,status_uf,source_url,fonte_sha256,coletado_em
+1,2024,1,31,A,DF,UNICO,UNICO,https://example.org/mandatos/1,fixture,2026-11-01T00:00:00+00:00
+2,2024,1,31,A,DF,UNICO,UNICO,https://example.org/mandatos/2,fixture,2026-11-01T00:00:00+00:00
+1,2024,2,29,,DF,MULTIPLOS,UNICO,https://example.org/mandatos/1,fixture,2026-11-01T00:00:00+00:00

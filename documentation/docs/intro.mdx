@@ -26,6 +26,12 @@ Senado Federal) e estrutura de gabinete.
 - **Recorte:** despesas CEAPS do ano fiscal completo de 2024 (21.430 lançamentos), por mês,
   categoria e fornecedor, comparadas dentro do partido e da UF.
 
+A comparação implementada usa a média dos **outros senadores com lançamentos na mesma
+competência**, em exercício no mês e com partido/UF históricos unívocos. Meses sem
+lançamento não são preenchidos com zero; mudanças de partido e grupos sem pares são
+sinalizados. As regras e as consultas estão em
+[Modelagem dbt: pergunta central](./modelagem-dbt.mdx#pergunta-central-comparação-mensal-por-partido-e-uf).
+
 As perguntas derivadas (presença, comissões, gabinete) e a situação de cada uma estão em
 [Escopo e perguntas](./escopo-e-perguntas.mdx).
 
