@@ -8,6 +8,6 @@ with meses as (
 )
 select l.ano, esperado.mes as mes_sem_lancamentos
 from limites l
-cross join lateral generate_series(l.primeiro, l.ultimo) as esperado(mes)
+cross join lateral generate_series(l.primeiro::int, l.ultimo::int) as esperado(mes)
 left join meses m on m.ano = l.ano and m.mes = esperado.mes
 where m.mes is null
