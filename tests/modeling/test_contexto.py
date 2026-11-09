@@ -55,6 +55,7 @@ class ContextTests(unittest.TestCase):
             target = Path(directory) / 'contexto.csv'
             contexto.write_seed(target, [])
             self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o644)
+            self.assertNotIn(b'\r', target.read_bytes())
 
     def test_failed_write_preserves_previous_seed(self):
         with tempfile.TemporaryDirectory() as directory:

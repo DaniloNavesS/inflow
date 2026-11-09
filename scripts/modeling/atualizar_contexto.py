@@ -127,7 +127,7 @@ def write_seed(target, rows):
         with tempfile.NamedTemporaryFile(mode='w', dir=target.parent, delete=False, newline='') as stream:
             tmp = stream.name
             os.fchmod(stream.fileno(), 0o644)
-            writer = csv.DictWriter(stream, fieldnames=FIELDS)
+            writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator='\n')
             writer.writeheader()
             writer.writerows(rows)
         os.replace(tmp, target)

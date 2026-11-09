@@ -1,5 +1,5 @@
 DO $$ BEGIN
-  IF (SELECT count(*) FROM analytics_marts.fct_despesas) <> 4 THEN
+  IF (SELECT count(*) FROM analytics_marts.fct_despesas) <> 5 THEN
     RAISE EXCEPTION 'Granularidade alterada'; END IF;
   IF (SELECT count(*) FROM analytics_marts.dim_fornecedor_historico) <> 1 THEN
     RAISE EXCEPTION 'Reexecução criou versão sem mudança'; END IF;
