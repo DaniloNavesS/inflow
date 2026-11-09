@@ -1,0 +1,47 @@
+# Usar APENAS junto ao Compose raiz e com -p inflow-e3-validation.
+# Cada recurso persistente e cada escrita no lake são separados da base local.
+services:
+  postgres:
+    container_name: inflow_e3_validation_postgres
+    ports: !override []
+  airflow-db:
+    container_name: inflow_e3_validation_airflow_db
+  airflow-init:
+    volumes: !override
+      - validation_lake:/lake
+      - cnpj_cache:/cache/cnpj
+      - airflow_state:/opt/airflow/state
+  airflow:
+    container_name: inflow_e3_validation_airflow
+    ports: !override []
+    environment:
+      ENABLE_CNPJ_OWNERS: "0"
+      INFLOW_PIPELINE_SCHEDULE: "* * * * *"
+      AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: "5"
+    volumes: !override
+      - validation_lake:/lake
+      - cnpj_cache:/cache/cnpj
+      - airflow_state:/opt/airflow/state
+  ingestion:
+    container_name: inflow_e3_validation_ingestion
+    environment:
+      ENABLE_CNPJ_OWNERS: "0"
+  analytics:
+    container_name: inflow_e3_validation_analytics
+    volumes: !override
+      - validation_lake:/lake
+      - ./tests:/tests:ro
+volumes:
+  validation_lake:
+    name: inflow_e3_validation_lake
+  postgres_data:
+    name: inflow_e3_validation_postgres_data
+  cnpj_cache:
+    name: inflow_e3_validation_cnpj_cache
+  airflow_db:
+    name: inflow_e3_validation_airflow_db
+  airflow_state:
+    name: inflow_e3_validation_airflow_state
+networks:
+  inflow_network:
+    name: inflow_e3_validation_network
