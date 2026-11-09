@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 
 DEFAULT_PIPELINE = "analytics_lake"
+DEFAULT_SLA_HOURS = 26
 
 
 def evaluate(last_success, *, now, sla_hours, pipeline=DEFAULT_PIPELINE):
@@ -54,8 +55,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--sla-hours", type=float,
-        default=os.getenv("LAKE_FRESHNESS_SLA_HOURS", "24"),
-        help="Tempo máximo desde o último lake completo (padrão: 24 horas).",
+        default=os.getenv("LAKE_FRESHNESS_SLA_HOURS", str(DEFAULT_SLA_HOURS)),
+        help="Tempo máximo desde o último sucesso do pipeline (padrão: 26 horas).",
     )
     parser.add_argument(
         "--pipeline", default=DEFAULT_PIPELINE,
