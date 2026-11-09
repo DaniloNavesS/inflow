@@ -1,6 +1,6 @@
 ---
-title: "0005: Granularidade da fato de despesas e índice decididos por plano de execução"
-sidebar_label: "0005: Granularidade e índice da fato"
+title: "0005: Granularidade do fato de despesas e índice decididos por plano de execução"
+sidebar_label: "0005: Granularidade e índice do fato"
 sidebar_position: 5
 ---
 
