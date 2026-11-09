@@ -170,6 +170,27 @@ def secao_gasto_mensal(filtros):
     tabela(df.drop(columns="periodo"), moeda=["valor_total"])
 
 
+def secao_pergunta_13(filtros):
+    st.header("Pergunta 13 (parcial): fornecedores que mais receberam CEAPS")
+    st.caption(
+        "Mostra as empresas e pessoas fornecedoras, não os donos: o quadro societário (CNPJ) ainda não foi "
+        "transformado em modelos analíticos. Partido e UF atuais; todos os filtros se aplicam."
+    )
+    df = consultar("maiores_fornecedores", filtros)
+    if sem_dados(df):
+        return
+    topo = df.head(15).assign(rotulo=lambda d: d["razao_social"].str.slice(0, 45))
+    st.plotly_chart(
+        px.bar(topo, x="valor_total", y="rotulo", orientation="h",
+               hover_data=["documento", "senadores", "quantidade_despesas"],
+               labels={"valor_total": "Valor recebido (R$)", "rotulo": "Fornecedor"},
+               title="Maiores fornecedores (até 15)")
+        .update_yaxes(autorange="reversed"),
+        width="stretch",
+    )
+    tabela(df, moeda=["valor_total"])
+
+
 # ---------------------------------------------------------------- Página
 
 st.title("Mandato Aberto")
@@ -213,7 +234,7 @@ filtros = {
 
 ABAS = {
     "Gastos (CEAPS)": (secao_pergunta_central, secao_pergunta_1, secao_grupos,
-                       secao_pergunta_11, secao_gasto_mensal),
+                       secao_pergunta_11, secao_gasto_mensal, secao_pergunta_13),
 }
 
 for aba, secoes in zip(st.tabs(list(ABAS)), ABAS.values()):

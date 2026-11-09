@@ -278,3 +278,29 @@ def comparacao_mensal(filtros=None):
         """,
         f,
     )
+
+
+def maiores_fornecedores(filtros=None, limite=30):
+    """Pergunta 13 (parcial): fornecedores que mais receberam CEAPS. Donos não estão nos marts."""
+    f = _filtros(filtros)
+    f["limite"] = int(limite)
+    return _consultar(
+        f"""
+        SELECT fo.fornecedor_id, fo.razao_social, fo.documento,
+               count(DISTINCT d.senador_id) AS senadores,
+               sum(d.quantidade_despesas) AS quantidade_despesas,
+               sum(d.valor_total) AS valor_total
+        FROM analytics_marts.agg_despesas_mensais_fornecedor_categoria d
+        JOIN analytics_marts.dim_fornecedor fo USING (fornecedor_id)
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE {_clausula('d.ano', 'anos', f['anos'], 'int')}
+          AND {_clausula('s.partido_atual', 'partidos', f['partidos'], 'text')}
+          AND {_clausula('s.uf_atual', 'ufs', f['ufs'], 'text')}
+          AND {_clausula('d.senador_id', 'senadores', f['senadores'], 'int')}
+          AND {_clausula('d.categoria_id', 'categorias', f['categorias'], 'text')}
+        GROUP BY fo.fornecedor_id, fo.razao_social, fo.documento
+        ORDER BY valor_total DESC, fo.fornecedor_id
+        LIMIT %(limite)s
+        """,
+        f,
+    )
