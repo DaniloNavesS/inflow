@@ -23,6 +23,8 @@ make cdc-test          # Teste de propagação de eventos CDC (Postgres -> Kafka
 make cdc-semantics     # Teste de semântica de entrega e replay (At-least-once vs. Effectively-once)
 make cdc-replay-demo   # Demonstração comparativa de replay no terminal
 make test-lake        # Testes analíticos com PostgreSQL e lake descartáveis
+make test-models       # Modelos dbt + suíte de qualidade em PostgreSQL descartável
+make quality           # Qualidade dos marts publicados, resumida por dimensão
 ```
 
 ## Documentação

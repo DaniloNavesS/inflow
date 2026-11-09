@@ -92,9 +92,9 @@ execução concluída, sem ingestão concorrente. Falha pode deixar modelos de e
 
 - Orquestração: executar `make models` após ingestão bem-sucedida; usar saída não zero para
   detectar falhas. Agendamento, retry, backfill e SLA pertencem à frente de orquestração.
-- Qualidade: testes básicos de chaves, referências, reconciliação por lançamento/agregado
-  e intervalos acompanham os modelos. A suíte ampla de volume e distribuição é da frente
-  de qualidade.
+- Qualidade: a suíte de esquema, volume, unicidade, integridade, histórico e distribuição
+  roda junto dos modelos; ver [Qualidade dos dados](./qualidade-dos-dados.mdx). Coluna nova
+  em um mart precisa entrar no contrato `esquema_esperado` do modelo.
 - Otimização: comparar `fct_despesas` e `agg_despesas_mensais` usando o mesmo agrupamento
   e filtros de competência; a mensal não permite detalhar fornecedor ou documento.
 - Painel: consumir `analytics_marts`; documentar que partido/UF são atuais. Para média e

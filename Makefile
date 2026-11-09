@@ -44,6 +44,8 @@ help:
 		'  make models-docs      Gera catálogo e linhagem dos modelos dbt' \
 		'  make models-context   Atualiza contexto histórico oficial do ano (padrão 2024)' \
 		'  make test-models      Valida os modelos em PostgreSQL descartável' \
+		'  make quality          Roda os testes de qualidade nos modelos publicados e resume por dimensão' \
+		'  make quality-report   Resume por dimensão a última execução do dbt (build ou test)' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
 		'  make docs             Serve a documentação' \
@@ -197,6 +199,18 @@ test-models:
 
 models-docs: start models-prepare
 	$(COMPOSE) run --build --rm modeling docs generate
+
+# Qualidade: testa os marts já publicados (sem reconstruir) e resume por dimensão.
+# run_results.json é apagado antes para que uma falha de conexão não reporte o resultado
+# de uma execução anterior. O código de saída vem do relatório: 1 se algum teste falhou.
+.PHONY: quality quality-report
+quality: start models-prepare
+	rm -f analytics/dbt/target/run_results.json
+	-$(COMPOSE) run --build --rm modeling test
+	python3 scripts/quality/relatorio_qualidade.py --target analytics/dbt/target
+
+quality-report:
+	python3 scripts/quality/relatorio_qualidade.py --target analytics/dbt/target
 
 CONTEXT_YEAR ?= 2024
 .PHONY: models-context

@@ -1,0 +1,158 @@
+---
+title: Qualidade dos dados
+sidebar_position: 10
+---
+
+# Qualidade dos dados
+
+A suíte de qualidade roda dentro do projeto dbt (`analytics/dbt`), junto dos modelos. Ela
+cobre seis dimensões: esquema, volume, unicidade, integridade, histórico e distribuição.
+São 189 testes: 149 novos e os 40 que já acompanhavam a modelagem. Todos rodam em cada
+`dbt build`. Um teste com severidade de erro interrompe a publicação dos modelos que
+dependem do dado reprovado.
+
+## Executar
+
+```bash
+# Testa os marts já publicados, sem reconstruir, e imprime o resumo por dimensão
+make quality
+
+# Só o resumo da última execução do dbt (por exemplo, logo depois de `make models`)
+make quality-report
+
+# Suíte completa em PostgreSQL descartável, incluindo a prova de detecção de defeitos
+make test-models
+```
+
+`make quality` sai com código 1 quando algum teste falha. Avisos não reprovam. O resumo vem
+de `scripts/quality/relatorio_qualidade.py`, que lê `run_results.json` e `manifest.json` em
+`analytics/dbt/target/`. A opção `--json arquivo.json` grava o mesmo resumo em formato
+estruturado, com `aprovado`, `executado_em`, contagens por dimensão e a lista de problemas.
+
+```text
+Qualidade dos dados: APROVADA (dbt build em 2026-11-09T01:20:29Z)
+
+Dimensão        Total  Passou  Aviso  Falhou  Erro  Pulado
+Esquema            29      29      0       0     0       0
+Volume             16      16      0       0     0       0
+Unicidade          32      32      0       0     0       0
+Integridade        80      80      0       0     0       0
+Histórico           7       7      0       0     0       0
+Distribuição       25      25      0       0     0       0
+```
+
+Para rodar uma dimensão ou um modelo, use os seletores nativos do dbt:
+
+```bash
+docker compose run --rm modeling test --select test_name:esquema_esperado
+docker compose run --rm modeling test --select tag:historico
+docker compose run --rm modeling test --select "fct_despesas,test_name:proporcao"
+```
+
+## O que cada dimensão verifica
+
+| Dimensão | Teste | Onde | O que pega |
+| --- | --- | --- | --- |
+| Esquema | `esquema_esperado` | 9 fontes do OLTP e 20 marts | Coluna ausente, renomeada ou retipada. Nos marts, coluna nova que não entrou no contrato também reprova. |
+| Volume | `volume_minimo` | origem e marts principais | Carga vazia ou truncada (ex.: menos de 81 senadores ou 1.000 despesas). |
+| Volume | `volume_igual` | `agg_*`, `gestao_*` | Linha perdida ou criada entre camadas (ex.: um senador a menos em `gestao_comissoes_senador`). |
+| Volume | `volume_por_grupo` (aviso) | `fct_despesas` por competência | Mês com menos de 25% da mediana mensal de lançamentos. |
+| Unicidade | `unique`, `unicidade_combinada` | todas as dimensões e fatos | Chave técnica duplicada e grão natural duplicado: (senador, ano, mês), (documento DSF, nome), (fornecedor, início da versão). |
+| Unicidade | `fornecedor_documento_unico_por_versao_atual` | histórico de fornecedores | Mesmo CNPJ/CPF aberto em dois `fornecedor_id`. |
+| Integridade | `not_null`, `relationships`, `accepted_values` | fatos e dimensões | Fato órfão, chave nula, status fora do domínio. |
+| Integridade | `regra_linha` | 15 regras de negócio | Ex.: `apto_contagem` só com resolução EXATA e documento SUCESSO; `COMPARAVEL` se e somente se existe média de pares; total de servidores = gabinete + escritório. |
+| Integridade | `reconciliacao_*`, `metricas_gestao_origem`, `medias_pares_origem` | já existiam | Recalculam os marts a partir do OLTP e exigem igualdade exata. |
+| Histórico | `fornecedor_versao_atual_unica` | SCD2 de fornecedores | Duas versões abertas para o mesmo fornecedor. |
+| Histórico | `fornecedor_versao_atual_reflete_cadastro` | SCD2 de fornecedores | Versão aberta diferente do cadastro atual, ou exclusão na origem sem versão encerrada. |
+| Histórico | `fornecedor_sem_versao_redundante` | SCD2 de fornecedores | Versões contíguas idênticas, criadas sem mudança real. |
+| Histórico | `fornecedor_intervalos_validos`, `historico_sem_sobreposicao` | SCD2 de fornecedores | Intervalo vazio, no futuro ou sobreposto. |
+| Histórico | `contexto_status_coerente`, `contexto_competencias_contiguas` | contexto mensal de partido/UF | `UNICO` sem partido, `SEM_EXERCICIO` com dias em exercício, mais dias que o mês, competência faltando no meio do ano. |
+| Distribuição | `intervalo_valores` | valores, meses, percentuais | Lançamento acima de R$ 1.000.000, mês fora de 1 a 12, percentual fora de 0 a 100, desvio abaixo de −100%. |
+| Distribuição | `proporcao` | despesas, presenças, contexto | Datas fiscais inválidas acima de 1%. Avisos: lançamentos de valor zero acima de 10%, resolução EXATA abaixo de 50%, documentos com FALHA acima de 50%, competências sem contexto acima de 5%. |
+| Distribuição | `concentracao_maxima` (aviso) | `fct_despesas` | Uma categoria com mais de 80% do gasto, ou um fornecedor com mais de 50%. |
+| Distribuição | `competencias_sem_lacunas` | `fct_despesas` | Mês sem nenhum lançamento entre o primeiro e o último mês carregados do ano. |
+
+Os testes genéricos ficam em `analytics/dbt/tests/generic/` e são aplicados em
+`models/sources.yml` e `models/marts/schema.yml`. Os testes singulares ficam em
+`analytics/dbt/tests/qualidade/<dimensão>/`.
+
+### Esquema por família de tipo
+
+O contrato declara a família de cada coluna: `inteiro`, `decimal`, `flutuante`, `texto`,
+`data`, `instante` ou `booleano`. Também aceita o nome exato do `information_schema`.
+Assim, alargar `integer` para `bigint` não gera alarme. Já um valor monetário que vira
+`double precision`, uma data que vira texto ou uma coluna removida reprovam. Nas fontes,
+o contrato lista só as colunas lidas pelo staging (`permitir_extras: true`). Colunas
+operacionais novas no OLTP não quebram o dbt.
+
+## Limites e perfis
+
+Os limites de volume e distribuição ficam num só lugar: `vars.limites_qualidade` em
+`analytics/dbt/dbt_project.yml`. Há dois perfis:
+
+- `producao` (padrão): calibrado pela base de 2024 documentada em
+  [Modelagem dimensional](./modelagem-dbt.mdx#validação-na-base-local), com folga.
+  A base tem 21.430 despesas, 3.516 fornecedores, 88 senadores com despesas e quatro
+  datas fiscais inválidas (0,02%).
+- `fixture`: zera os volumes mínimos e relaxa as concentrações para a base sintética de
+  `tests/modeling`, que tem cinco despesas. `run.sh` passa
+  `--vars '{"perfil_qualidade": "fixture"}'`.
+
+Um nome de limite inexistente quebra a compilação, em vez de virar um teste que sempre passa.
+
+## Erro, aviso e disjuntor
+
+- **Erro**: regra estrutural ou de negócio que não admite exceção. Inclui esquema, volume
+  mínimo, unicidade, integridade, histórico, faixas válidas, datas inválidas e meses sem
+  lançamentos.
+- **Aviso**: sinal estatístico que pede investigação, mas pode ser legítimo. Inclui queda
+  de volume mensal, concentração, proporção de zeros, resolução de presença, falhas do
+  parser e contexto não coletado.
+
+Os testes de esquema e volume nas fontes do OLTP rodam antes do staging. Se a ingestão
+entregar tabela vazia ou com coluna retipada, o `dbt build` pula todos os modelos
+dependentes. Os marts da execução anterior continuam publicados e não são sobrescritos por
+dados ruins.
+
+## Prova de que os testes detectam
+
+Teste que nunca falha não protege nada. Por isso `make test-models` tem uma etapa a mais.
+Primeiro, a suíte passa sobre a fixture. Depois, `tests/modeling/quality_defects.sql`
+injeta doze defeitos diretamente nos marts, pelo menos um por dimensão. O script exige
+que o teste correspondente termine em `FAIL`; erro de SQL ou de compilação não conta como
+detecção. Em seguida, os marts são reconstruídos e a sequência original continua.
+
+| Dimensão | Defeito injetado | Teste que precisa falhar |
+| --- | --- | --- |
+| Esquema | `fct_despesas.valor` vira `double precision` | `esquema_esperado` em `fct_despesas` |
+| Esquema | `dim_senador.uf_atual` removida | `esquema_esperado` em `dim_senador` |
+| Volume | senador apagado de `gestao_comissoes_senador` | `volume_igual` |
+| Unicidade | linha duplicada em `fct_despesas_mensais` | `unicidade_combinada` |
+| Integridade | despesa apontando para senador inexistente | `relationships` |
+| Integridade | presença não resolvida marcada como apta | `regra_linha` |
+| Histórico | segunda versão aberta do fornecedor | `fornecedor_versao_atual_unica` |
+| Histórico | versão antiga igual à atual | `fornecedor_sem_versao_redundante` |
+| Histórico | contexto `UNICO` com zero dias em exercício | `contexto_status_coerente` |
+| Distribuição | lançamento de R$ 5.000.000 | `intervalo_valores` |
+| Distribuição | todas as datas fiscais inválidas | `proporcao` |
+| Distribuição | fevereiro sem lançamentos entre janeiro e março | `competencias_sem_lacunas` |
+
+## Integração com a equipe
+
+- **Orquestração**: depois de `make models`, rodar `make quality-report` ou chamar o script
+  com `--json`. O código de saída indica reprovação. O campo `executado_em` dá o instante da
+  última verificação, que pode alimentar o SLA.
+- **Painel**: exibir `aprovado` e `executado_em` do resumo JSON ao lado da última
+  atualização. Avisos ativos podem ser listados como ressalvas dos números.
+- **Modelagem**: coluna nova em um mart precisa entrar no `esquema_esperado` do modelo em
+  `schema.yml`. Caso contrário, o teste de esquema reprova de propósito.
+
+## Limitações
+
+- Os limites de produção vêm da base de 2024. Cargas de outros anos ou parciais podem
+  disparar avisos de contexto não coletado, já que o seed só cobre 2024. Nesse caso,
+  ajuste o perfil em vez de desligar o teste.
+- O histórico de fornecedores só pode ser verificado a partir da primeira observação do
+  snapshot. Os testes não reconstroem mudanças anteriores a ela.
+- Os testes leem os marts publicados. Não medem o frescor da API, que é responsabilidade
+  da frente de orquestração.
