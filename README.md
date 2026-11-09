@@ -37,7 +37,7 @@ Os resultados e tempos ficam em `lake/consumo.json`. Veja o
 
 Para verificar o SLA operacional desde o último lake completo, execute
 `make lake-freshness` após construir a imagem analytics. O limite padrão é de
-24 horas.
+26 horas (agenda diária com duas horas de margem operacional).
 
 A base com Airflow sobe com `make airflow-up`. Consulte o
 [guia do Airflow](orchestration/README.md) para acesso, execução manual, ativação

@@ -78,9 +78,34 @@ O enriquecimento CNPJ pode baixar gigabytes. Uma falha opcional nesse enriquecim
 é registrada pelo ingestor, mas não faz a tarefa inteira falhar: esse comportamento
 já existe na ingestão e precisa ser considerado na política de qualidade.
 
-O SLA inicial de 24 horas precisa considerar a duração da carga diária e dos
-retries; uma execução mais lenta no dia seguinte pode excedê-lo. A métrica ainda
-representa o lake, não a tabela dimensional final nem a idade da fonte.
+O SLA padrão é **26 horas**: agenda diária de 24 horas mais 2 horas de margem
+operacional. O primeiro backfill real de 2024 em 08/11 levou 133 segundos sem
+enriquecimento CNPJ; três execuções dessa duração e dois intervalos de retry
+somariam cerca de 9 minutos. A margem não é garantia do pior caso: timeouts longos
+ou CNPJ ativo exigem nova medição. A checagem horária detecta uma violação em até
+aproximadamente uma hora adicional, se scheduler e banco estiverem disponíveis.
+A métrica representa o lake, não a tabela dimensional final nem a idade da fonte.
+Se seu `.env` ainda definir 24, ele prevalece sobre o novo padrão: ajuste-o para 26
+e recrie os serviços para adotar a política revisada.
+
+## Backfill e concorrência
+
+`inflow_backfill` é manual e exige `ano_inicio` e `ano_fim` (inclusive), entre
+2000 e 2100, com no máximo 10 anos. A API CEAPS é anual. O fluxo valida o período,
+reingere a origem e materializa o lake **completo**. Nunca enviar um recorte ao
+merge Delta, pois ele interpreta ausências como exclusões.
+
+O pool `inflow_exclusivo` tem uma vaga e é criado na subida do Airflow. Ele evita
+duas tarefas de ingestão/lake simultâneas, mas DAGs podem intercalar suas tarefas:
+não é um bloqueio da execução inteira. Comandos manuais fora do Airflow não usam
+esse pool.
+
+## Alertas
+
+Todas as tarefas registram JSON nos callbacks de retry e falha definitiva, com
+`event`, `dag_id`, `task_id`, `run_id`, `attempt` e `error_type`. O texto original
+da exceção e o contexto não são copiados, para não expor credenciais. Os eventos
+são `task_retry` e `task_failed`. Não há envio para email ou serviço externo.
 
 Para pausar e parar:
 
@@ -101,8 +126,30 @@ docker compose stop airflow airflow-db
 - Run do lake: `d3ff5316-a445-47b1-8286-3fe5b0f38fa3`.
 - PostgreSQL, Parquet e Delta concordaram nas duas consultas; soma preservada
   de R$ 32.290.271,35. Freshness retornou `fresh` com SLA de 24 horas.
-- Horários e retries foram verificados na definição. Disparo automático, ingestão
-  completa pelo DAG, recuperação após indisponibilidade e backfill ainda pendentes.
+- Naquela data, horários e retries haviam sido verificados somente na definição.
+  A validação complementar está registrada no diário abaixo.
+
+Para repetir os cenários, use **sempre** o projeto e o overlay isolados:
+
+```powershell
+docker compose -p inflow-e3-validation -f docker-compose.yml -f orchestration/tests/compose.validation.yml up -d --build --wait airflow
+python orchestration/tests/validate_runtime.py backfill --start-year 2024 --end-year 2024
+python orchestration/tests/validate_runtime.py backfill --start-year 2024 --end-year 2024 --expect-unchanged
+python orchestration/tests/validate_runtime.py retry
+python orchestration/tests/validate_runtime.py exhausted
+python orchestration/tests/validate_runtime.py freshness
+python orchestration/tests/validate_runtime.py scheduler
+```
+
+O overlay separa banco, lake, cache, metadados e rede; desliga o enriquecimento
+CNPJ e não publica portas. Os cenários de falha desligam apenas esse banco de
+validação. Os relatórios JSON e logs ficam em `resultados/e3-orquestracao/`
+(ignorados pelo Git). O cenário `scheduler` usa um horário próximo, pausa o DAG
+ao terminar e restaura a configuração do ambiente isolado. Não interromper esse
+comando sem conferir a pausa do DAG. Os demais cenários usam `airflow dags test`.
+Uma alteração na fonte entre backfills pode mudar os totais; investigar antes
+de atribuir a diferença a duplicação.
+
 
 ## Referências
 
