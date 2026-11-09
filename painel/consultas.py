@@ -345,3 +345,33 @@ def estrutura_gabinete(filtros=None):
         """,
         f,
     )
+
+
+def presencas_documentadas(filtros=None):
+    """Perguntas 5 e 6 (parcial): sessões com presença documentada no DSF; não é taxa."""
+    f = _filtros(filtros)
+    return _consultar(
+        f"""
+        SELECT s.senador_id, s.nome, s.partido_atual, s.uf_atual, p.ano,
+               p.sessoes_com_presenca_documentada, p.registros_documentais, p.registros_fora_contagem
+        FROM analytics_marts.gestao_presencas_documentadas p
+        JOIN analytics_marts.dim_senador s USING (senador_id)
+        WHERE {_clausula('p.ano', 'anos', f['anos'], 'int')}
+          AND {_filtros_senador_atual(f)}
+        ORDER BY p.ano, p.sessoes_com_presenca_documentada DESC, s.nome
+        """,
+        f,
+    )
+
+
+def cobertura_dsf():
+    """Sessões e documentos DSF coletados, com o status do parser: denominador de cobertura."""
+    return _consultar(
+        """
+        SELECT ss.sessao_id, ss.data_sessao, ss.tipo, d.codigo_diario, d.status_parser,
+               d.pagina_inicial, d.pagina_final, d.url_documento
+        FROM analytics_marts.dim_sessao_plenaria ss
+        LEFT JOIN analytics_marts.dim_documento_dsf d USING (sessao_id)
+        ORDER BY ss.data_sessao, d.codigo_diario
+        """
+    )

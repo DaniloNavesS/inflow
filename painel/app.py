@@ -242,6 +242,39 @@ def secao_pergunta_12(filtros):
     tabela(df)
 
 
+# ---------------------------------------------------------------- Presença
+
+def secao_presenca(filtros):
+    st.header("Perguntas 5 e 6 (parcial): presenças documentadas no Diário do Senado")
+    cobertura = consultar("cobertura_dsf")
+    sessoes = cobertura["sessao_id"].nunique()
+    st.warning(
+        f"Não é taxa de comparecimento: só {sessoes} sessão(ões) plenária(s) foram coletadas e não há o total "
+        "de sessões deliberativas a que cada senador estava obrigado. Ausência de registro não significa falta."
+    )
+    st.caption(
+        "Conta sessões distintas com presença aceita (identidade exata, situação PRESENTE e documento com parser "
+        "SUCESSO). Registros de documentos parciais ficam fora da contagem e aparecem à parte. Partido e UF "
+        "atuais; o filtro de categoria não se aplica."
+    )
+    df = consultar("presencas_documentadas", filtros)
+    if not sem_dados(df):
+        por_partido = (df.groupby("partido_atual", as_index=False)
+                       .agg(senadores=("senador_id", "nunique"),
+                            sessoes_com_presenca=("sessoes_com_presenca_documentada", "sum"))
+                       .sort_values("sessoes_com_presenca", ascending=False))
+        st.plotly_chart(
+            px.bar(por_partido, x="partido_atual", y="sessoes_com_presenca", hover_data=["senadores"],
+                   labels={"partido_atual": "Partido (atual)",
+                           "sessoes_com_presenca": "Presenças documentadas (senador × sessão)"},
+                   title="Presenças documentadas por partido"),
+            width="stretch",
+        )
+        tabela(df)
+    with st.expander("Sessões e documentos coletados"):
+        tabela(cobertura)
+
+
 # ---------------------------------------------------------------- Página
 
 st.title("Mandato Aberto")
@@ -287,6 +320,7 @@ ABAS = {
     "Gastos (CEAPS)": (secao_pergunta_central, secao_pergunta_1, secao_grupos,
                        secao_pergunta_11, secao_gasto_mensal, secao_pergunta_13),
     "Comissões e gabinete": (secao_pergunta_7, secao_pergunta_12),
+    "Presença": (secao_presenca,),
 }
 
 for aba, secoes in zip(st.tabs(list(ABAS)), ABAS.values()):
