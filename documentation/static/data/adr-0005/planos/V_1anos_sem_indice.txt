@@ -1,0 +1,25 @@
+-- Cenário: V_1anos_sem_indice (2026-11-09T02:31:17Z, 7 execuções)
+-- Tempos (ms): 1.998 2.133 2.152 2.276 2.290 2.333 2.942 
+-- Preparo: SET temp_buffers = '64MB'; CREATE TEMP TABLE fct_volume AS SELECT * FROM analytics_marts.fct_despesas WHERE ano >= 2025; CREATE INDEX ON fct_volume (senador_id, ano, mes, categoria_id, valor); VACUUM ANALYZE fct_volume; SET enable_indexscan = off; SET enable_bitmapscan = off; SET enable_indexonlyscan = off; 
+-- SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM fct_volume WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1004.06..1004.30 rows=96 width=75) (actual time=1.903..1.907 rows=54 loops=1)
+   Sort Key: mes, categoria_id
+   Sort Method: quicksort  Memory: 29kB
+   Buffers: local hit=634
+   ->  HashAggregate  (cost=999.70..1000.90 rows=96 width=75) (actual time=1.849..1.867 rows=54 loops=1)
+         Group Key: mes, categoria_id
+         Batches: 1  Memory Usage: 48kB
+         Buffers: local hit=634
+         ->  Seq Scan on fct_volume  (cost=0.00..991.99 rows=771 width=41) (actual time=1.052..1.576 rows=771 loops=1)
+               Filter: ((senador_id = 581) AND (ano = 2025))
+               Rows Removed by Filter: 23095
+               Buffers: local hit=634
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.138 ms
+ Execution Time: 1.998 ms

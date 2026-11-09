@@ -1,0 +1,13 @@
+-- Cenário: Q3_mensal (2026-11-09T02:31:09Z, 7 execuções)
+-- Tempos (ms): 0.807 0.817 0.847 0.889 0.910 0.935 1.033 
+-- SELECT senador_id, mes, valor_total, quantidade_despesas
+-- FROM analytics_marts.fct_despesas_mensais WHERE ano = 2024;
+
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on fct_despesas_mensais  (cost=0.00..168.71 rows=974 width=22) (actual time=0.009..0.745 rows=974 loops=1)
+   Filter: (ano = 2024)
+   Rows Removed by Filter: 4683
+   Buffers: shared hit=98
+ Planning Time: 0.072 ms
+ Execution Time: 0.847 ms

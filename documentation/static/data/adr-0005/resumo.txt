@@ -1,0 +1,63 @@
+# ADR 0005: resultados de 2026-11-09T02:30:46Z
+
+Senador 581, ano 2025, 7 execuções por cenário após uma leitura de aquecimento.
+
+## Tabelas
+
+| Tabela | Linhas | Páginas | Tabela | Índices | Bytes por linha |
+|---|---|---|---|---|---|
+| fct_despesas | 111837 | 3029 | 24 MB | 7440 kB | 222 |
+| agg_despesas_mensais_fornecedor_categoria | 71431 | 953 | 7664 kB | 0 bytes | 110 |
+| agg_despesas_mensais | 21828 | 270 | 2200 kB | 0 bytes | 103 |
+| fct_despesas_mensais | 5657 | 98 | 824 kB | 0 bytes | 149 |
+
+## Respostas idênticas entre granularidades
+
+| Comparação | Linhas diferentes |
+|---|---|
+| Q1_detalhada_x_categoria | 0 |
+| Q2_detalhada_x_mensal | 0 |
+| Q3_detalhada_x_mensal | 0 |
+
+## Consultas
+
+| Cenário | Acesso | Buffers | Mediana (ms) | Faixa (ms) |
+|---|---|---|---|---|
+| Q1_antes_detalhada_sem_indice | Seq Scan | shared hit=3029 | 11.825 | 9.066–17.015 |
+| Q1_depois_detalhada_com_indice | Index Only Scan | shared hit=10 | 0.661 | 0.478–1.090 |
+| Q1_categoria_sem_indice | Seq Scan | shared hit=270 | 1.212 | 0.957–1.948 |
+| Q1_categoria_com_indice_transitorio | Index Only Scan | shared hit=4 | 0.194 | 0.108–0.276 |
+| Q2_detalhada | Seq Scan | shared hit=3029 | 63.129 | 44.778–69.007 |
+| Q2_categoria | Seq Scan | shared hit=270 | 14.917 | 12.827–21.262 |
+| Q2_mensal | Seq Scan | shared hit=98 | 2.918 | 2.177–5.056 |
+| Q3_detalhada | Seq Scan | shared hit=3029 | 24.586 | 18.213–29.905 |
+| Q3_categoria | Seq Scan | shared hit=270 | 5.084 | 2.831–8.314 |
+| Q3_mensal | Seq Scan | shared hit=98 | 0.889 | 0.807–1.033 |
+
+## Pergunta central (001_pergunta_central.sql)
+
+| Cenário | Acesso | Buffers | Mediana (ms) | Faixa (ms) |
+|---|---|---|---|---|
+| PC1_pergunta_central | Seq Scan | shared hit=132 | 3.525 | 2.838–4.980 |
+| PC2_pergunta_central | Seq Scan | shared hit=1173 | 60.089 | 44.094–74.166 |
+| PC3_pergunta_central | Seq Scan | shared hit=130 | 0.822 | 0.650–0.993 |
+
+## Volume: Q1 em cópias com 1, 3 e 6 anos
+
+| Cenário | Acesso | Buffers | Mediana (ms) | Faixa (ms) |
+|---|---|---|---|---|
+| V_1anos_sem_indice | Seq Scan | local hit=634 | 2.276 | 1.998–2.942 |
+| V_1anos_com_indice | Index Only Scan | local hit=11 | 0.628 | 0.255–1.801 |
+| V_3anos_sem_indice | Seq Scan | local hit=1730 | 4.914 | 3.934–7.014 |
+| V_3anos_com_indice | Index Only Scan | local hit=10 | 0.594 | 0.251–0.821 |
+| V_6anos_sem_indice | Seq Scan | local hit=3029 | 10.026 | 7.422–12.634 |
+| V_6anos_com_indice | Index Only Scan | local hit=10 | 0.543 | 0.468–0.878 |
+
+## Materialização (3 execuções, transação desfeita)
+
+| Passo | Mediana (ms) | Faixa (ms) |
+|---|---|---|
+| fct_despesas (CREATE TABLE AS) | 304.052 | 234.738–597.667 |
+| índice de fct_despesas | 140.889 | 125.770–142.364 |
+| agg_despesas_mensais | 106.488 | 100.509–122.138 |
+| fct_despesas_mensais (sem o contexto) | 18.521 | 15.388–19.092 |

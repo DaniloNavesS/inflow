@@ -1,0 +1,19 @@
+-- Cenário: Q1_depois_detalhada_com_indice (2026-11-09T02:30:53Z, 7 execuções)
+-- Tempos (ms): 0.478 0.483 0.565 0.661 0.929 0.969 1.090 
+-- SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM analytics_marts.fct_despesas WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=0.42..51.37 rows=96 width=75) (actual time=0.089..0.413 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=10
+   ->  Index Only Scan using "57b40ac36644b7261b2be8b361fd63af" on fct_despesas  (cost=0.42..42.92 rows=725 width=41) (actual time=0.058..0.176 rows=771 loops=1)
+         Index Cond: ((senador_id = 581) AND (ano = 2025))
+         Heap Fetches: 0
+         Buffers: shared hit=10
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.203 ms
+ Execution Time: 0.483 ms

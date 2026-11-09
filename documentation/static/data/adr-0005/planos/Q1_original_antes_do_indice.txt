@@ -1,0 +1,24 @@
+-- Cenário: plano original, capturado em 2026-11-08 antes de existir qualquer índice em
+-- analytics_marts.fct_despesas (111.837 linhas, 2020-2025). Mesma consulta da Q1.
+-- Tempos (ms) em três execuções: 10.671 10.075 13.705; a exibida abaixo: 11.814.
+-- SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM analytics_marts.fct_despesas WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                        QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=4741.66..4752.07 rows=96 width=75) (actual time=11.167..11.620 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=3029
+   ->  Sort  (cost=4741.66..4743.50 rows=737 width=41) (actual time=11.121..11.242 rows=771 loops=1)
+         Sort Key: mes, categoria_id
+         Sort Method: quicksort  Memory: 87kB
+         Buffers: shared hit=3029
+         ->  Seq Scan on fct_despesas  (cost=0.00..4706.56 rows=737 width=41) (actual time=9.787..10.609 rows=771 loops=1)
+               Filter: ((senador_id = 581) AND (ano = 2025))
+               Rows Removed by Filter: 111066
+               Buffers: shared hit=3029
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.210 ms
+ Execution Time: 11.814 ms

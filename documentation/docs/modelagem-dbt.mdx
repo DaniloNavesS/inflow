@@ -8,7 +8,8 @@ sidebar_position: 9
 Ana e Danilo implementam as transformações em `analytics/dbt`. O dbt publica modelos
 no PostgreSQL, em schemas separados de `oltp`; o lake Parquet/Delta existente permanece
 independente. A escolha permite consumir os marts com ferramentas PostgreSQL e comparar
-as granularidades detalhada e mensal com `EXPLAIN (ANALYZE, BUFFERS)`.
+as granularidades detalhada e mensal com `EXPLAIN (ANALYZE, BUFFERS)`. Essa comparação
+e a consulta otimizada estão em [Otimização de consultas](./otimizacao-consultas.mdx).
 
 ## Executar
 

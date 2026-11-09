@@ -1,0 +1,22 @@
+-- Cenário: PC3_pergunta_central (2026-11-09T02:31:15Z, 7 execuções)
+-- Tempos (ms): 0.650 0.672 0.688 0.822 0.860 0.880 0.993 
+--    SELECT status_contexto_partido, status_contexto_uf, count(*) AS competencias,        sum(valor_total) AS valor_total FROM analytics_marts.gestao_comparacao_despesas_mensais WHERE ano=2024 GROUP BY status_contexto_partido, status_contexto_uf ORDER BY status_contexto_partido, status_contexto_uf;
+
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=210.82..210.85 rows=12 width=62) (actual time=0.601..0.602 rows=3 loops=1)
+   Sort Key: status_contexto_partido, status_contexto_uf
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=130
+   ->  HashAggregate  (cost=210.45..210.60 rows=12 width=62) (actual time=0.586..0.588 rows=3 loops=1)
+         Group Key: status_contexto_partido, status_contexto_uf
+         Batches: 1  Memory Usage: 24kB
+         Buffers: shared hit=130
+         ->  Seq Scan on gestao_comparacao_despesas_mensais  (cost=0.00..200.71 rows=974 width=30) (actual time=0.178..0.310 rows=974 loops=1)
+               Filter: (ano = 2024)
+               Rows Removed by Filter: 4683
+               Buffers: shared hit=130
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.078 ms
+ Execution Time: 0.650 ms
