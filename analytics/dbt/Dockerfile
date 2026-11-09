@@ -5,6 +5,7 @@ COPY analytics/dbt/dbt_project.yml analytics/dbt/profiles.yml ./
 COPY analytics/dbt/models/ ./models/
 COPY analytics/dbt/snapshots/ ./snapshots/
 COPY analytics/dbt/tests/ ./tests/
+COPY analytics/dbt/seeds/ ./seeds/
 # Diretórios internos usados também quando não há bind mounts (testes).
 # O sticky bit permite UIDs arbitrários sem liberar escrita no projeto.
 RUN mkdir -p target logs /tmp/dbt-home && chmod 1777 target logs /tmp/dbt-home
