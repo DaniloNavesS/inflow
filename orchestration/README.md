@@ -30,8 +30,8 @@ A senha e os logs persistem no volume `airflow_state`; os metadados ficam em
 ## Fluxo e política de execução
 
 ```text
-escolher_origem → ingerir_origem → materializar_lake → verificar_freshness
-        └──────────────────────→ materializar_lake
+escolher_origem → ingerir_origem → materializar_lake → transformar_modelos ┬→ verificar_freshness
+        └──────────────────────→ materializar_lake                       └→ verificar_freshness_modelos
 ```
 
 `inflow_pipeline` roda às **06h diariamente**, em `America/Sao_Paulo`:
@@ -42,13 +42,32 @@ escolher_origem → ingerir_origem → materializar_lake → verificar_freshness
 - Até três tentativas por tarefa: execução inicial e dois retries, separados por um minuto.
 - Uma execução do pipeline por vez. Não executar ingestão/lake manualmente ao
   mesmo tempo, pois esses comandos não passam pelo controle do Airflow.
-- Falha na ingestão bloqueia o lake; falha no lake bloqueia a checagem final.
+- Falha na ingestão bloqueia o lake; falha no lake bloqueia os modelos; falha nos
+  modelos bloqueia as duas checagens finais.
 - `catchup=False`: ligar a agenda não dispara todos os dias passados. Não é backfill.
 
 `inflow_freshness` roda no **minuto 15 de cada hora**, independentemente da carga:
 
-- Consulta o monitoramento sem renovar a data do lake.
+- Consulta o monitoramento sem renovar a data do lake nem a dos modelos.
+- Duas tarefas independentes: `verificar_freshness` (pipeline `analytics_lake`) e
+  `verificar_freshness_modelos` (pipeline `dbt_models`). Um lake em dia não esconde
+  modelos atrasados, e vice-versa.
 - Falha se a CLI detectar atraso, ausência de sucesso ou erro de consulta.
+
+## Transformações dbt
+
+`transformar_modelos` executa `dbt build` (o mesmo comando de `make models`): seeds,
+modelos, snapshot de fornecedores e testes, inclusive a suíte de qualidade. Um teste
+reprovado faz a tarefa falhar. O dbt roda em um venv próprio na imagem do Airflow,
+com as mesmas versões do serviço `modeling` (`dbt-core 1.12.6`, `dbt-postgres 1.9.1`),
+e o projeto `analytics/dbt/` é copiado na construção: reconstrua a imagem após mudar
+os modelos.
+
+O wrapper `orchestration/bin/modelos.py` registra cada execução em
+`monitoring.pipeline_runs` com o nome `dbt_models` (`success` ou `failed`, com o
+código de saída do dbt). A tarefa usa o pool `inflow_exclusivo`, para não reconstruir
+os modelos durante uma reingestão concorrente. Os modelos leem o OLTP, não o lake; a
+dependência do lake é de ordem, para que uma carga com falha não publique modelos.
 - A falha aparece na interface/logs; nenhum alerta externo foi configurado.
 
 ## Primeira execução e ativação
@@ -84,7 +103,8 @@ enriquecimento CNPJ; três execuções dessa duração e dois intervalos de retr
 somariam cerca de 9 minutos. A margem não é garantia do pior caso: timeouts longos
 ou CNPJ ativo exigem nova medição. A checagem horária detecta uma violação em até
 aproximadamente uma hora adicional, se scheduler e banco estiverem disponíveis.
-A métrica representa o lake, não a tabela dimensional final nem a idade da fonte.
+O mesmo limite vale para `dbt_models`, cuja execução levou de 14 a 17 segundos.
+As métricas representam o último sucesso do lake e dos modelos, não a idade da fonte.
 Se seu `.env` ainda definir 24, ele prevalece sobre o novo padrão: ajuste-o para 26
 e recrie os serviços para adotar a política revisada.
 
@@ -92,11 +112,11 @@ e recrie os serviços para adotar a política revisada.
 
 `inflow_backfill` é manual e exige `ano_inicio` e `ano_fim` (inclusive), entre
 2000 e 2100, com no máximo 10 anos. A API CEAPS é anual. O fluxo valida o período,
-reingere a origem e materializa o lake **completo**. Nunca enviar um recorte ao
+reingere a origem, materializa o lake **completo** e reconstrói os modelos dbt. Nunca enviar um recorte ao
 merge Delta, pois ele interpreta ausências como exclusões.
 
 O pool `inflow_exclusivo` tem uma vaga e é criado na subida do Airflow. Ele evita
-duas tarefas de ingestão/lake simultâneas, mas DAGs podem intercalar suas tarefas:
+duas tarefas de ingestão/lake/dbt simultâneas, mas DAGs podem intercalar suas tarefas:
 não é um bloqueio da execução inteira. Comandos manuais fora do Airflow não usam
 esse pool.
 
@@ -115,6 +135,18 @@ docker compose exec airflow dags pause inflow_freshness
 docker compose stop airflow airflow-db
 ```
 
+## Checklist da frente de orquestração
+
+| Item | Situação | Evidência |
+|---|---|---|
+| Dependências explícitas entre etapas | Atendido | ingestão → lake → dbt → freshness; falha bloqueia as seguintes (cenários abaixo) |
+| Agendamento | Atendido | `inflow_pipeline` 06h e `inflow_freshness` de hora em hora; run disparado pelo scheduler |
+| Retry | Atendido | Tentativa 1 `up_for_retry`, tentativa 2 `success`; três tentativas esgotadas bloqueiam o restante |
+| Backfill | Atendido | `inflow_backfill` por intervalo de anos, executado duas vezes sem alterar contagens e somas |
+| Transformações no fluxo | Atendido | `transformar_modelos` (`dbt build`) registrada como `dbt_models` |
+| Freshness e SLA | Atendido | 26 h para lake e modelos, medidos separadamente; `fresh`, `stale` e `missing` demonstrados |
+| Alerta de falha | Parcial | Log estruturado de retry e falha; sem envio externo |
+
 ## Validação realizada em 07/11/2026
 
 - Imagem construída e serviço saudável no Docker Desktop.
@@ -127,7 +159,38 @@ docker compose stop airflow airflow-db
 - PostgreSQL, Parquet e Delta concordaram nas duas consultas; soma preservada
   de R$ 32.290.271,35. Freshness retornou `fresh` com SLA de 24 horas.
 - Naquela data, horários e retries haviam sido verificados somente na definição.
-  A validação complementar está registrada no diário abaixo.
+
+## Validação realizada em 08/11/2026 (sem dbt)
+
+Ambiente isolado, CNPJ desligado. Backfill de 2024 a partir do banco vazio
+(0 → 21.449 despesas, R$ 32.290.271,35, PostgreSQL = Delta) e repetido sem alteração;
+retry com `materializar_lake` falhando na tentativa 1 e passando na 2; retries
+esgotados (três falhas, freshness `upstream_failed`); SLA `fresh`/`stale`/`missing`;
+run disparado pelo agendador `scheduled__2026-11-08T23:49:00+00:00` com sucesso.
+O total passou de 21.430 para 21.449 por mudança da fonte, igual nas duas execuções.
+
+## Validação realizada em 10/11/2026 (com dbt)
+
+Mesmo ambiente isolado, base de 21.449 despesas, após a integração do dbt:
+
+| Cenário | Run do Airflow | Resultado |
+|---|---|---|
+| Falha real do dbt | `manual__2026-11-11T00:17:58.650586+00:00` | `transformar_modelos` falhou nas 3 tentativas (teste de qualidade com erro de tipo); as duas checagens ficaram `upstream_failed`; 3 registros `dbt_models=failed` |
+| Pipeline completo | `manual__2026-11-11T00:21:49.799482+00:00` | lake → dbt (17 s) → duas checagens `success` |
+| Backfill 2024 (1ª) | `manual__2026-11-11T00:22:43.272743+00:00` | ingestão real 212 s, lake, dbt 15 s, checagens `success` |
+| Backfill 2024 (2ª) | `manual__2026-11-11T00:26:40.535612+00:00` | `unchanged: true`: OLTP, Delta e `analytics_marts.fct_despesas` com 21.449 linhas e R$ 32.290.271,35 antes e depois |
+| Retry | `manual__2026-11-11T00:28:20.734568+00:00` | `materializar_lake` tentativa 1 `up_for_retry`, tentativa 2 `success`; dbt e checagens `success` |
+| Retries esgotados | `manual__2026-11-11T00:30:01.025854+00:00` | lake falhou 3 vezes; dbt e as duas checagens `upstream_failed` |
+| SLA | — | lake e `dbt_models`: 26 h `fresh` (código 0), 0,001 h `stale` (código 1); pipeline sem execuções `missing` (código 1) |
+| Agendador | `scheduled__2026-11-11T00:35:00+00:00` | disparado pelo scheduler: ingestão real, lake, dbt e as duas checagens `success` em 93 s; DAG pausado ao final |
+
+Testes de contrato: 18 testes no contêiner (15 dos DAGs e 3 do wrapper dbt), 11 de
+freshness e 7 do período de ingestão. Em clone limpo, sem `.env`: `make airflow-test`
+(18), `make test-lake` (31) e a parte Docker de `make test-models` (223 testes dbt e
+12 defeitos injetados detectados) passaram. O primeiro cenário revelou um erro já presente
+na `develop`: `generate_series(smallint, smallint)` no teste
+`competencias_sem_lacunas`, ambíguo depois que `mes` passou a `smallint`; corrigido
+com cast explícito.
 
 Para repetir os cenários, use **sempre** o projeto e o overlay isolados:
 

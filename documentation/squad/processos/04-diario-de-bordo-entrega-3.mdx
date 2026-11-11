@@ -8,7 +8,7 @@ sidebar_position: 4
 
 **Grupo:** 11 — Banco de Dados 2 / UnB
 
-**Atualizado em:** 08/11/2026
+**Atualizado em:** 10/11/2026
 
 ## Escopo
 
@@ -24,7 +24,7 @@ dados e suas regras; isso não significa que todas as frentes da E3 estejam conc
 
 :::note[Registro em construção]
 
-As contribuições de orquestração, qualidade, otimização e painel serão preenchidas pelos
+As contribuições de qualidade e painel serão preenchidas pelos
 responsáveis com suas atividades e evidências. Um campo “a preencher” indica ausência do
 registro nesta página, não ausência de trabalho do integrante.
 
@@ -36,8 +36,8 @@ registro nesta página, não ausência de trabalho do integrante.
 |---|---|
 | Ana Luiza — @Ana-Luiza-SC | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
 | Danilo Naves — @DaniloNavesS | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
-| Yzabella Miranda — @redjsun | — A preencher: atividades e evidências da frente de orquestração. |
-| Manuella Valadares — @manuvaladares | — A preencher: atividades e evidências da frente de orquestração. |
+| Yzabella Miranda — @redjsun | Orquestração: período de ingestão por intervalo de anos, DAG `inflow_backfill` com validação prévia, pool `inflow_exclusivo`, testes de contrato do backfill e de idempotência, `freshness.py --pipeline`. |
+| Manuella Valadares — @manuvaladares | Orquestração: freshness operacional com SLA, Airflow no Compose com os DAGs diário e de freshness, callbacks de retry e falha, SLA revisado para 26 h, validação real em ambiente isolado e integração do dbt ao DAG com freshness própria dos modelos. |
 | Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
 | Vilmar Fagundes — @VilmarFagundes | Otimização: consulta do painel por senador otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais; script de medição reproduzível e ADR 0005. |
 | Yan Guimarães — @yanzin00 | — A preencher: atividades e evidências da frente do painel. |
@@ -122,6 +122,76 @@ as transformações; não substituem a suíte ampla de qualidade de dados.
 - Entregar comandos, catálogo e contratos às demais frentes, sem declarar agendamento,
   freshness, SLA, otimização ou painel como concluídos por este trabalho.
 
+## Semana de 2 a 10/11 — orquestração
+
+### Atividades de 7/11
+
+**Manuella** criou a verificação de freshness operacional (`analytics/src/freshness.py`):
+idade do último sucesso registrado em `monitoring.pipeline_runs`, com relógio do banco,
+saída JSON e códigos 0/1/2. Em seguida subiu o Airflow 3.4 no Compose, com banco de
+metadados próprio, e os DAGs `inflow_pipeline` (diário às 06h, ingestão → lake →
+freshness) e `inflow_freshness` (horário, independente da carga). A primeira execução
+real usou as 21.430 despesas existentes.
+
+**Yzabella** parametrizou a ingestão por intervalo de anos (`INGESTION_START_YEAR`,
+`INGESTION_END_YEAR`), já que a API da CEAPS é anual, e criou o DAG manual
+`inflow_backfill`, que valida o intervalo antes de tocar na origem e sempre rematerializa
+o lake completo. O pool `inflow_exclusivo`, com uma vaga, impede que backfill e carga
+diária escrevam ao mesmo tempo. Também escreveu os testes de contrato do backfill, o teste
+de idempotência em PostgreSQL descartável e o parâmetro `--pipeline` do freshness.
+
+### Atividades de 8/11
+
+**Manuella** adicionou callbacks de retry e de falha definitiva em JSON, sem o texto da
+exceção, e revisou o SLA para 26 horas (agenda diária mais duas horas de margem). Criou o
+harness `validate_runtime.py`, que roda cenários reais em um projeto Docker isolado, e
+coletou as evidências de backfill, retry, retries esgotados, SLA e agendador.
+
+### Atividades de 10/11
+
+**Manuella** integrou as transformações ao DAG: dbt em venv próprio na imagem do Airflow,
+tarefa `transformar_modelos` (`dbt build`) depois do lake, registro como `dbt_models` em
+`monitoring.pipeline_runs` e uma segunda checagem de freshness para os modelos. Antes
+disso, corrigiu o `docker-compose.yml`, que o merge da `develop` havia corrompido,
+misturando os serviços `airflow` e `modeling`. A validação foi repetida com o dbt.
+
+### O que foi medido
+
+| Verificação da frente de orquestração | Resultado registrado |
+|---|---|
+| Backfill 2024 a partir de banco vazio (8/11) | 0 → 21.449 despesas, R$ 32.290.271,35; PostgreSQL = Delta |
+| Backfill repetido (8/11 e 10/11) | Contagem, IDs e soma inalterados no OLTP, no Delta e em `fct_despesas` |
+| Retry | Lake derrubado com o banco fora: tentativa 1 `up_for_retry`, tentativa 2 `success` |
+| Retries esgotados | Três falhas; modelos e freshness `upstream_failed` |
+| Falha real do dbt | Três tentativas reprovadas, checagens bloqueadas, três registros `dbt_models=failed` |
+| Agendador | Runs `scheduled__2026-11-08T23:49:00+00:00` e, já com dbt, `scheduled__2026-11-11T00:35:00+00:00` com sucesso, sem trigger manual |
+| SLA (lake e modelos) | 26 h `fresh` (código 0); 0,001 h `stale` (código 1); sem execuções `missing` |
+| Duração | Ingestão de 2024 de 67 a 212 s; lake em ~1 s; `dbt build` de 14 a 17 s |
+| Testes | 18 no contêiner do Airflow, 11 de freshness, 7 do período de ingestão; em clone limpo, `make airflow-test`, `make test-lake` e os 223 testes dbt de `make test-models` |
+
+O total passou de 21.430 para 21.449 entre 7 e 8/11 por mudança na fonte; as execuções
+repetidas bateram entre si. Run IDs e detalhes estão no
+[guia do Airflow](https://github.com/DaniloNavesS/inflow/blob/develop/orchestration/README.md).
+
+### O que surpreendeu ou exigiu ajuste
+
+- O `merge_snapshot` do Delta trata ausências como exclusões: o backfill nunca pode
+  enviar um recorte, só o lake completo.
+- O merge da `develop` intercalou dois serviços do Compose sem conflito textual; o arquivo
+  continuava sendo YAML, mas com chaves duplicadas e o Airflow sem variáveis.
+- A primeira execução do dbt pelo Airflow falhou em um teste de qualidade: `mes` virou
+  `smallint` na otimização e `generate_series(smallint, smallint)` é ambíguo no
+  PostgreSQL 15. Os dois PRs passaram isoladamente; a orquestração revelou a combinação.
+- Um sucesso do lake mascararia uma falha dos modelos se houvesse uma só métrica.
+
+### O que foi decidido
+
+- Uma tarefa `dbt build` em vez de `dbt run` e `dbt test` separados: é o comando que a
+  equipe já usa e executa snapshot, seeds e testes na ordem do grafo.
+- Freshness separada por pipeline (`analytics_lake` e `dbt_models`), com o mesmo SLA.
+- Validação sempre em projeto Docker isolado, sem tocar na base local.
+- Alertas apenas em log estruturado; nenhum serviço externo nesta entrega.
+
 ### Evidências por grupo
 
 #### Modelagem e transformações — Ana e Danilo
@@ -139,8 +209,11 @@ as transformações; não substituem a suíte ampla de qualidade de dados.
 
 #### Orquestração — Yzabella e Manuella
 
-— A preencher: PRs, commits e demonstrações de agendamento, dependências, retry,
-backfill, freshness e SLA.
+- [Freshness operacional com SLA](https://github.com/DaniloNavesS/inflow/commit/3d34383) e [Airflow com os DAGs diário e de freshness](https://github.com/DaniloNavesS/inflow/commit/646b991) — Manuella.
+- [Período de ingestão](https://github.com/DaniloNavesS/inflow/commit/3eaaf10), [DAG de backfill e pool](https://github.com/DaniloNavesS/inflow/commit/56fc46f), [testes de backfill e idempotência](https://github.com/DaniloNavesS/inflow/commit/50f6d11) e [freshness por pipeline](https://github.com/DaniloNavesS/inflow/commit/bc62641) — Yzabella.
+- [Callbacks de retry e falha](https://github.com/DaniloNavesS/inflow/commit/cb9bfa4), [SLA de 26 h](https://github.com/DaniloNavesS/inflow/commit/9398970) e [validação real](https://github.com/DaniloNavesS/inflow/commit/ca195f7) — Manuella.
+- Correção do Compose, integração do dbt e validação com modelos — Manuella.
+- [Guia do Airflow, com Run IDs das validações](https://github.com/DaniloNavesS/inflow/blob/develop/orchestration/README.md).
 
 #### Qualidade — Victor
 
@@ -161,7 +234,6 @@ backfill, freshness e SLA.
 
 | Frente | Atividades | O que foi medido | Decisões e evidências |
 |---|---|---|---|
-| Orquestração — Yzabella e Manuella | — A preencher | — A preencher | — A preencher |
 | Qualidade — Victor | — A preencher | — A preencher | — A preencher |
 | Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
 | Painel — Yan | — A preencher | — A preencher | — A preencher |
@@ -170,6 +242,5 @@ backfill, freshness e SLA.
 
 Os modelos e suas regras estão disponíveis para integração. Os próximos registros devem
 reunir as execuções e evidências das demais frentes, além da validação conjunta da E3.
-A publicação desta página não encerra a entrega: retry e backfill demonstrados, testes
-complementares, planos de execução, freshness/SLA e painel precisam dos registros dos
-respectivos responsáveis.
+A orquestração está registrada acima, com retry, backfill, agendamento, freshness e SLA
+demonstrados. Qualidade e painel ainda precisam dos registros dos respectivos responsáveis.

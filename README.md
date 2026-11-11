@@ -41,9 +41,11 @@ Para verificar o SLA operacional desde o último lake completo, execute
 `make lake-freshness` após construir a imagem analytics. O limite padrão é de
 26 horas (agenda diária com duas horas de margem operacional).
 
-A base com Airflow sobe com `make airflow-up`. Consulte o
+A orquestração com Airflow sobe com `make airflow-up`. O DAG diário encadeia
+ingestão → lake → modelos dbt (`dbt build`) e verifica o SLA do lake e dos modelos
+separadamente; há também um DAG de backfill por intervalo de anos. Consulte o
 [guia do Airflow](orchestration/README.md) para acesso, execução manual, ativação
-dos agendamentos e integração das transformações finais.
+dos agendamentos, backfill e evidências da validação.
 
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
