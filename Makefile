@@ -38,6 +38,9 @@ help:
 		'  make lake-check       Verifica DuckDB, Postgres e a pasta do lake' \
 		'  make lake-parquet     Materializa despesas_enriquecidas em Parquet' \
 		'  make lake             Materializa Parquet/Delta e compara consultas com o PostgreSQL' \
+		'  make lake-freshness   Verifica o SLA desde a última execução completa do lake' \
+		'  make airflow-up       Sobe o Airflow local em http://localhost:8080' \
+		'  make airflow-test     Testa a definição dos DAGs sem executar a ingestão' \
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make models           Publica os modelos dimensionais com dbt' \
@@ -145,6 +148,21 @@ lake-delta: start build-analytics
 	$(COMPOSE) run --rm analytics python main.py delta
 
 lake-consumption: lake
+
+.PHONY: lake-freshness
+lake-freshness:
+	$(COMPOSE) run --rm --no-deps analytics python freshness.py
+
+.PHONY: airflow-up airflow-test airflow-stop
+airflow-up:
+	$(COMPOSE) --profile orchestration up -d --build --wait airflow
+
+airflow-test:
+	$(COMPOSE) build airflow
+	$(COMPOSE) run --rm --no-deps airflow python -m unittest discover -s /opt/inflow/tests -v
+
+airflow-stop:
+	$(COMPOSE) stop airflow airflow-db
 
 lake-check: start
 	$(COMPOSE) run --rm analytics python main.py check
