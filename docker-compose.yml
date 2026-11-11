@@ -1,3 +1,9 @@
+x-airflow-image: &airflow-image
+  image: inflow-airflow:3.4.0
+  build:
+    context: .
+    dockerfile: orchestration/Dockerfile
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -82,9 +88,131 @@ services:
       DB_USER: ${POSTGRES_USER:-inflow_user}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
       LAKE_DIR: /lake
+      LAKE_FRESHNESS_SLA_HOURS: ${LAKE_FRESHNESS_SLA_HOURS:-26}
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - inflow_network
+
+  modeling:
+    profiles: ["modeling"]
+    build:
+      context: .
+      dockerfile: analytics/dbt/Dockerfile
+    user: "${MODELING_UID:-1000}:${MODELING_GID:-1000}"
+    volumes:
+      - type: bind
+        source: ./analytics/dbt/target
+        target: /app/dbt/target
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./analytics/dbt/logs
+        target: /app/dbt/logs
+        bind:
+          create_host_path: false
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
+  airflow-db:
+    profiles: ["orchestration"]
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - inflow_network
+
+  airflow-init:
+    <<: *airflow-image
+    profiles: ["orchestration"]
+    user: "0:0"
+    entrypoint: /bin/bash
+    command:
+      - -ec
+      - |
+        mkdir -p /lake /cache/cnpj /opt/airflow/state
+        chown -R 50000:0 /lake /cache/cnpj /opt/airflow/state
+    volumes:
+      - ./lake:/lake
+      - cnpj_cache:/cache/cnpj
+      - airflow_state:/opt/airflow/state
+    networks:
+      - inflow_network
+
+  airflow:
+    <<: *airflow-image
+    profiles: ["orchestration"]
+    # O pool que serializa ingestão/lake precisa existir antes do primeiro run.
+    command:
+      - bash
+      - -ec
+      - |
+        airflow db migrate
+        airflow pools set inflow_exclusivo 1 "Serializa ingestão, lake e backfill"
+        exec airflow standalone
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Sao_Paulo
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: manu:admin
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
+      INGESTION_YEAR: ${INGESTION_YEAR:-2024}
+      LIMIT_SENADORES: ${LIMIT_SENADORES:-0}
+      LEGISLATURE: ${LEGISLATURE:-57}
+      ENABLE_CNPJ_OWNERS: ${ENABLE_CNPJ_OWNERS:-1}
+      RFB_CNPJ_TOKEN: ${RFB_CNPJ_TOKEN:-gn672Ad4CF8N6TK}
+      RFB_CNPJ_MONTH: ${RFB_CNPJ_MONTH:-}
+      CNPJ_OWNER_MAX_DEPTH: ${CNPJ_OWNER_MAX_DEPTH:-5}
+      CNPJ_CACHE_DIR: /cache/cnpj
+      LATE_DATA_ALLOWED_MONTHS: ${LATE_DATA_ALLOWED_MONTHS:-2}
+      LAKE_DIR: /lake
+      LAKE_FRESHNESS_SLA_HOURS: ${LAKE_FRESHNESS_SLA_HOURS:-26}
+    volumes:
+      - ./lake:/lake
+      - cnpj_cache:/cache/cnpj
+      - airflow_state:/opt/airflow/state
+    ports:
+      - "127.0.0.1:${AIRFLOW_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8080/api/v2/monitor/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     networks:
       - inflow_network
 
@@ -102,6 +230,25 @@ services:
     volumes:
       - ./resultados/benchmark-lake:/resultados:Z
     command: ["--source", "oltp"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inflow_network
+
+  painel:
+    profiles: ["painel"]
+    build:
+      context: .
+      dockerfile: painel/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-inflow_db}
+      DB_USER: ${POSTGRES_USER:-inflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-inflow_pass}
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,6 +321,8 @@ services:
       - inflow_network
 
 volumes:
+  airflow_db:
+  airflow_state:
   postgres_data:
     name: inflow_postgres_data
   cnpj_cache:

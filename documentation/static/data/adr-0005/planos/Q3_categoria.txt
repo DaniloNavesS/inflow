@@ -1,0 +1,19 @@
+-- Cenário: Q3_categoria (2026-11-09T02:31:07Z, 7 execuções)
+-- Tempos (ms): 2.831 3.672 4.767 5.084 6.634 6.889 8.314 
+-- SELECT senador_id, mes, sum(valor_total) AS valor_total, sum(quantidade_despesas) AS quantidade
+-- FROM analytics_marts.agg_despesas_mensais WHERE ano = 2024 GROUP BY senador_id, mes;
+
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=581.74..605.62 rows=1592 width=70) (actual time=2.422..2.673 rows=974 loops=1)
+   Group Key: senador_id, mes
+   Batches: 1  Memory Usage: 577kB
+   Buffers: shared hit=270
+   ->  Seq Scan on agg_despesas_mensais  (cost=0.00..542.85 rows=3889 width=20) (actual time=0.005..1.133 rows=3889 loops=1)
+         Filter: (ano = 2024)
+         Rows Removed by Filter: 17939
+         Buffers: shared hit=270
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.087 ms
+ Execution Time: 2.831 ms

@@ -39,3 +39,8 @@ resultados/
 Thumbs.db
 .vscode/
 .idea/
+
+# Artefatos locais do dbt
+analytics/dbt/target/
+analytics/dbt/logs/
+analytics/dbt/dbt_packages/

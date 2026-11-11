@@ -1,0 +1,20 @@
+-- Cenário: V_1anos_com_indice (2026-11-09T02:31:19Z, 7 execuções)
+-- Tempos (ms): 0.255 0.322 0.382 0.628 0.724 0.778 1.801 
+-- Preparo: SET temp_buffers = '64MB'; CREATE TEMP TABLE fct_volume AS SELECT * FROM analytics_marts.fct_despesas WHERE ano >= 2025; CREATE INDEX ON fct_volume (senador_id, ano, mes, categoria_id, valor); VACUUM ANALYZE fct_volume; 
+-- SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM fct_volume WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=0.41..52.74 rows=96 width=75) (actual time=0.040..0.225 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: local hit=11
+   ->  Index Only Scan using fct_volume_senador_id_ano_mes_categoria_id_valor_idx on fct_volume  (cost=0.41..43.83 rows=771 width=41) (actual time=0.018..0.093 rows=771 loops=1)
+         Index Cond: ((senador_id = 581) AND (ano = 2025))
+         Heap Fetches: 0
+         Buffers: local hit=11
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.092 ms
+ Execution Time: 0.255 ms

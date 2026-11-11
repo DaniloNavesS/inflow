@@ -1,0 +1,137 @@
+version: 2
+# Testes na origem funcionam como disjuntor do `dbt build`: se a carga chegar vazia,
+# truncada ou com coluna removida/retipada, os modelos dependentes são pulados e os marts
+# da execução anterior não são sobrescritos. Só as colunas consumidas pelo staging entram
+# no contrato (permitir_extras), para não acoplar o dbt a colunas operacionais do OLTP.
+sources:
+  - name: oltp
+    schema: oltp
+    tables:
+      - name: despesas
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  senador_id: inteiro
+                  fornecedor_id: inteiro
+                  data_despesa: data
+                  ano: inteiro
+                  mes: inteiro
+                  tipo_despesa: texto
+                  valor: decimal
+                  atualizado_em: instante
+          - volume_minimo:
+              arguments:
+                minimo: despesas_min
+        columns:
+          - name: id
+            tests: [unique, not_null]
+      - name: fornecedores
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas: {id: inteiro, cnpj_cpf: texto, razao_social: texto}
+          - volume_minimo:
+              arguments:
+                minimo: fornecedores_min
+      - name: senadores
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas: {id: inteiro, nome: texto, partido: texto, uf: texto}
+          - volume_minimo:
+              arguments:
+                minimo: senadores_min
+      - name: comissoes
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas: {id: inteiro, sigla: texto, nome: texto, casa: texto}
+      - name: participacoes_comissao
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  senador_id: inteiro
+                  comissao_id: inteiro
+                  cargo: texto
+                  data_inicio: data
+                  data_fim: data
+                  timestamp_ingestao: instante
+      - name: estrutura_gabinete
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  senador_id: inteiro
+                  ano: inteiro
+                  qtd_pessoal_gabinete: inteiro
+                  qtd_pessoal_escritorio: inteiro
+                  qtd_total_servidores: inteiro
+                  auxilio_moradia: booleano
+                  imovel_funcional: booleano
+                  atualizado_em: instante
+      - name: sessao_plenaria
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  numero: inteiro
+                  data_sessao: data
+                  tipo: texto
+                  legislatura: inteiro
+                  sessao_legislativa: inteiro
+                  atualizado_em: instante
+          - volume_minimo:
+              arguments:
+                minimo: sessoes_min
+      - name: documento_dsf
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  sessao_id: inteiro
+                  codigo_diario: inteiro
+                  numero_diario: inteiro
+                  data_publicacao: data
+                  url_documento: texto
+                  pagina_inicial: inteiro
+                  pagina_final: inteiro
+                  sha256: texto
+                  status_parser: texto
+                  mensagem_parser: texto
+                  atualizado_em: instante
+      - name: registro_presenca
+        tests:
+          - esquema_esperado:
+              arguments:
+                permitir_extras: true
+                colunas:
+                  id: inteiro
+                  sessao_id: inteiro
+                  documento_dsf_id: inteiro
+                  senador_id: inteiro
+                  nome_documento: texto
+                  partido_documento: texto
+                  uf_documento: texto
+                  situacao: texto
+                  voto_registrado: booleano
+                  pagina: inteiro
+                  resolucao: texto
+                  atualizado_em: instante
+          - volume_minimo:
+              arguments:
+                minimo: registros_presenca_min

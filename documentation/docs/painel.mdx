@@ -1,0 +1,131 @@
+---
+title: Painel
+sidebar_position: 11
+---
+
+# Painel
+
+O painel é um app [Streamlit](https://streamlit.io) em `painel/` que lê os modelos publicados
+pelo dbt em `analytics_marts` e as execuções em `monitoring`. Ele não consulta o `oltp` e usa uma
+conexão somente leitura (`default_transaction_read_only=on`, com tempo limite de 10 s por consulta):
+o banco rejeita qualquer escrita feita por ele.
+
+O painel fica versionado no repositório e é reproduzível com um comando. Uma ferramenta de BI como o
+Metabase guardaria as definições dos gráficos no próprio banco de aplicação, fora do Git.
+
+## Como executar
+
+Com a origem carregada (`make ingestion`) e os modelos publicados:
+
+```bash
+make models        # publica analytics_marts (dbt build)
+make painel        # sobe o painel em http://localhost:8501
+make test-painel   # confere as consultas do painel contra os marts publicados
+make painel-stop   # para o painel
+```
+
+O serviço `painel` fica no profile `painel` do `docker-compose.yml` e só sobe depois que o PostgreSQL
+está saudável. Se o banco estiver fora do ar ou os modelos não existirem, o painel mostra uma mensagem
+com o comando a executar, em vez de um erro técnico.
+
+## Atualização dos dados
+
+O topo do painel mostra duas datas:
+
+- **Dados coletados em**: último `finished_at` com sucesso do pipeline `senate_ingestion` em
+  `monitoring.pipeline_runs`.
+- **Modelos atualizados em**: `materializado_em` de `analytics_marts.fct_despesas`, ou seja,
+  quando o dbt reconstruiu a fato.
+
+As consultas ficam em cache por 5 minutos. A verificação de freshness com SLA pertence à frente de
+orquestração e ainda não está integrada ao painel.
+
+## Filtros
+
+Ano, partido, UF, senador e categoria, na barra lateral. Sem seleção, o filtro considera todos os
+valores. Cada seção informa se usa o partido/UF **da competência** (histórico oficial de mandatos e
+filiações) ou o **atual** (cadastro do senador), e quais filtros não se aplicam a ela.
+
+## Perguntas, visualizações e modelos
+
+| Aba | Pergunta | Visualização | Modelo em `analytics_marts` | Partido/UF |
+|---|---|---|---|---|
+| Gastos (CEAPS) | Central: gasto mensal e desvio da média do partido e da UF | Ranking da diferença acumulada; com um senador filtrado, série mensal contra as médias dos pares; detalhe mensal com estados | `gestao_comparacao_despesas_mensais` | Da competência |
+| Gastos (CEAPS) | 1: média mensal por senador | Ranking e tabela | `gestao_media_mensal` | Atual |
+| Gastos (CEAPS) | 4 e 10: média mensal por partido e por UF | Barras por grupo e competências fora do cálculo | `fct_despesas_mensais` | Da competência |
+| Gastos (CEAPS) | 11: categoria de maior gasto | Senadores por categoria vencedora e tabela com empates | `gestao_maior_categoria` | Atual |
+| Gastos (CEAPS) | Gasto mensal total | Série mensal | `agg_despesas_mensais` | Atual |
+| Gastos (CEAPS) | 13 (parcial): maiores fornecedores | Ranking de fornecedores | `agg_despesas_mensais_fornecedor_categoria`, `dim_fornecedor` | Atual |
+| Comissões e gabinete | 7: comissões por senador | Ranking e tabela com vínculos sem início | `gestao_comissoes_senador` | Atual |
+| Comissões e gabinete | 12: quantitativo de pessoal | Gabinete e escritório empilhados, por ano | `fct_estrutura_gabinete` | Atual |
+| Presença | 5 e 6 (parcial): presenças documentadas | Presenças por partido e cobertura do DSF | `gestao_presencas_documentadas`, `dim_sessao_plenaria`, `dim_documento_dsf` | Atual |
+
+### Pergunta central
+
+Para cada senador e competência, o painel mostra o gasto, a média dos **outros** senadores do mesmo
+partido (e da mesma UF) com lançamentos no mês, a diferença em reais, o desvio percentual e quantos
+pares entraram na média. As regras são as da [modelagem](./modelagem-dbt.mdx#pergunta-central-comparação-mensal-por-partido-e-uf).
+
+O resumo por senador soma apenas as **diferenças em reais** dos meses `COMPARAVEL`; percentuais não
+são somados. Meses `SEM_PARES` ou `MULTIPLOS` aparecem no detalhe com média, diferença e percentual
+vazios, nunca como desvio zero. Diferença acima da média é um indicador aritmético, não indica
+irregularidade.
+
+### Perguntas 4 e 10: partido e UF da competência
+
+As médias por partido e por UF usam o partido e a UF oficiais de cada mês (`fct_despesas_mensais`),
+não o cadastro atual: um senador que trocou de partido em 2024 conta para o partido em que estava
+em cada mês.
+
+A média é o **gasto por senador-mês**: `sum(valor_total) / count(*)` sobre as competências com
+lançamentos, senador em exercício e classificação única no mês. É a mesma unidade usada na
+comparação da pergunta central. Competências com mais de um partido no mês (`MULTIPLOS`), sem
+exercício confirmado (`SEM_EXERCICIO`) ou de anos sem contexto histórico (`NAO_COLETADO`) não entram
+na média e aparecem num quadro abaixo do gráfico, com quantidade e valor. Somando grupo e
+competências fora do cálculo, o painel cobre todo o gasto de `fct_despesas_mensais`, o que é
+verificado por `make test-painel`.
+
+O contexto histórico versionado cobre apenas 2024. Outros anos carregados aparecem como `NAO_COLETADO`
+até que `make models-context CONTEXT_YEAR=<ano>` seja executado.
+
+## Limitações
+
+| Pergunta | Situação no painel |
+|---|---|
+| 2 e 3: despesas e categorias atípicas avaliadas por LLM | Não coberta: a classificação não é produzida pelos modelos |
+| 5 e 6: taxa de comparecimento | Parcial: o painel mostra presenças documentadas, sem taxa, pois só há a amostra de sessões coletadas e nenhum denominador de sessões deliberativas obrigatórias |
+| 7: comissões | Conta só comissões e subcomissões, identificadas pelo nome do colegiado: a origem traz também frentes, grupos parlamentares e conselhos, que ficam de fora. A contagem vale na data de referência do último `dbt build`; vínculos sem data de início ficam à parte e fim nulo é tratado como vínculo aberto, conforme a origem |
+| 8: vagas em comissões por partido | Não coberta: falta regra de vagas e atribuição temporal dos vínculos |
+| 9: votos nominais abertos | Não coberta: o indicador documental de voto não tem a granularidade de voto nominal |
+| 13: donos de fornecedores | Parcial: o painel mostra os fornecedores; o quadro societário do CNPJ ainda não foi transformado em marts |
+
+Nas seções que usam o partido e a UF atuais, um senador que trocou de partido aparece inteiro no
+partido atual. O cadastro atual também tem grafias diferentes para o mesmo estado (por exemplo,
+`S/PART` no cadastro e `S/Partido` no contexto histórico), que aparecem como valores distintos no filtro.
+
+## Testes
+
+`make test-painel` roda `tests/painel/test_consultas.py` no contêiner do painel, contra os marts
+publicados no banco do projeto. Os testes são pulados se o banco ou os modelos não existirem. Eles
+verificam:
+
+- conexão somente leitura e rejeição de grupo inválido antes de montar o SQL;
+- médias das perguntas 4 e 10 recalculadas a partir de `fct_despesas` e
+  `dim_contexto_parlamentar_mensal`, sem passar pelo modelo mensal;
+- cobertura total do gasto pelos grupos mais as competências fora do cálculo;
+- reconciliação dos totais e das diferenças da pergunta central com o mart;
+- ausência de desvio em meses sem comparação, filtros de senador e de categoria;
+- fornecedores, comissões, gabinete e presença contra SQL direto nos marts;
+- renderização de todas as abas com o `AppTest` do Streamlit, sem exceção.
+
+## Telas
+
+![Aba de gastos com o ranking da pergunta central](/img/painel/gastos.png)
+
+![Pergunta central com um senador filtrado: gasto mensal contra as médias dos pares](/img/painel/pergunta-central-senador.png)
+
+![Pergunta 7: comissões por senador](/img/painel/comissoes.png)
+
+![Pergunta 12: quantitativo de pessoal por senador](/img/painel/gabinete.png)
+
+![Presenças documentadas no DSF, com o aviso de que não é taxa](/img/painel/presenca.png)

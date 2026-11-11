@@ -1,0 +1,251 @@
+---
+title: Diário de bordo — Entrega 3
+sidebar_label: Diário de bordo (E3)
+sidebar_position: 4
+---
+
+# Diário de bordo — Entrega 3 — Mandato Aberto
+
+**Grupo:** 11 — Banco de Dados 2 / UnB
+
+**Atualizado em:** 11/11/2026
+
+## Escopo
+
+Registro da **E3 — Camada analítica transformada, testada e orquestrada**, em
+continuidade à [Entrega 2](./03-diario-de-bordo-semanas-7-a-10.mdx). A primeira versão
+registrou o trabalho conjunto de **Ana Luiza e Danilo Naves** na frente de modelagem e
+transformações, integrado à `develop` pelo [PR #35](https://github.com/DaniloNavesS/inflow/pull/35).
+Esta atualização acrescenta a frente de **otimização de consultas**, conduzida por
+**Vilmar Fagundes** sobre os modelos publicados por essa frente.
+
+O [enunciado da E3](https://github.com/UnB-BD2/PlanoEnsino/blob/main/_entregas/e3.md)
+orienta a construção de modelos dimensionais, transformações declarativas, testes,
+orquestração e consumo que responda à pergunta da E1. A frente de modelagem entrega os
+dados e suas regras; isso não significa que todas as frentes da E3 estejam concluídas.
+
+## Contribuições dos integrantes
+
+| Integrante | Contribuições registradas na E3 |
+|---|---|
+| Ana Luiza — @Ana-Luiza-SC | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
+| Danilo Naves — @DaniloNavesS | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
+| Yzabella Miranda — @redjsun | Orquestração: período de ingestão por intervalo de anos, DAG `inflow_backfill` com validação prévia, pool `inflow_exclusivo`, testes de contrato do backfill e de idempotência, `freshness.py --pipeline`. |
+| Manuella Valadares — @manuvaladares | Orquestração: freshness operacional com SLA, Airflow no Compose com os DAGs diário e de freshness, callbacks de retry e falha, SLA revisado para 26 h, validação real em ambiente isolado e integração do dbt ao DAG com freshness própria dos modelos. |
+| Victor Câmara — @victorcamaraa | Qualidade: suíte de testes no dbt para esquema, volume, unicidade, integridade, histórico e distribuição, com 149 testes novos sobre fontes e marts; testes genéricos reutilizáveis; limites por perfil (`producao` e `fixture`); testes na origem que impedem a publicação de carga vazia ou com esquema alterado; prova de detecção com 12 defeitos injetados; relatório por dimensão (`make quality`) e página de qualidade. |
+| Vilmar Fagundes — @VilmarFagundes | Otimização: carga da série CEAPS 2020–2025 para medição; consulta por senador e ano otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais, com respostas conferidas; análise das consultas da pergunta central; teste de crescimento de volume; script de medição reproduzível, ADR 0005 e página de otimização. |
+| Yan Guimarães — @yanzin00 | Painel Streamlit conectado a `analytics_marts`: pergunta central com médias dos pares, perguntas 1, 4, 10, 11 e 13 (parcial), comissões, gabinete e presenças documentadas, com filtros, datas de coleta e de modelos e testes contra os marts. |
+
+## Semana de 2 a 8/11 — modelagem e transformações
+
+### Atividades de 6/11
+
+**Ana e Danilo** organizaram a transformação com dbt em schemas próprios do PostgreSQL,
+sem substituir a ingestão e o lake existentes. Foram criadas as camadas de preparação e
+consumo, a fato de despesas por lançamento, as dimensões de senador, fornecedor, categoria
+e calendário e as agregações mensais.
+
+O trabalho incluiu um snapshot de fornecedores para preservar mudanças de documento e
+razão social. A reexecução, a correção de cadastro e a exclusão foram verificadas em banco
+descartável, distinguindo histórico observado de cadastro vigente na data de uma despesa.
+
+A frente também entregou os modelos de comissões e gabinete, com granularidades próprias,
+e a contagem de presenças documentadas no DSF. Os registros parciais e sem identidade
+foram preservados, sem produzir ausências ou uma taxa de assiduidade artificial.
+
+Na execução local, a gravação dos artefatos pelo contêiner como root provocou erro na
+limpeza. A configuração passou a usar UID/GID do usuário, com preparação dos diretórios
+e validação de escrita, edição e remoção sem sudo, inclusive com UID/GID alternativos.
+
+### Atividades de 8/11
+
+**Ana e Danilo** confrontaram os modelos com a pergunta central da E1. A estrutura
+inicial cobria as métricas de gastos, mas ainda faltava a comparação por partido e UF.
+O cadastro atual não era suficiente para classificar despesas de 2024.
+
+Foi criado um contexto mensal a partir dos mandatos, exercícios e filiações oficiais,
+versionado em um seed dbt. A comparação passou a usar outros senadores com lançamentos
+na mesma competência e classificação histórica unívoca. Mudanças de partido, grupos sem
+pares e médias zero receberam estados explícitos, preservando os valores das despesas.
+
+O detalhamento mensal por categoria e fornecedor completou a composição da pergunta
+central. As consultas, o catálogo e os contratos de consumo foram atualizados, e o
+trabalho foi integrado à `develop` pelo PR #35. O [ADR 0004](/docs/adr/modelagem-dimensional-com-dbt)
+formaliza as alternativas, a decisão, as consequências e os gatilhos de revisão.
+
+### O que foi medido
+
+| Verificação da frente de modelagem | Resultado registrado |
+|---|---|
+| Despesas e reconciliação monetária | 21.430 lançamentos e R$ 32.290.271,35 preservados |
+| Grão mensal por senador | 974 competências com lançamentos |
+| Detalhamento mensal por categoria e fornecedor | 13.404 linhas, com o mesmo total monetário |
+| Contexto histórico de 2024 | 88 senadores e 1.056 competências versionadas |
+| Comparação partidária | 938 competências comparáveis; 5 com múltiplos partidos, 27 sem pares e 4 sem exercício confirmado |
+| Comparação por UF | 970 competências comparáveis e 4 sem exercício confirmado |
+| Modelos institucionais | 425 comissões, 7.189 participações e 81 registros anuais de gabinete preservados |
+| Presença documental | 3 sessões, 3 documentos e 220 registros preservados, incluindo 2 identidades não resolvidas |
+| Regra conservadora de presença | 70 registros aceitos; 150 de documentos parciais mantidos fora da contagem |
+| Validação das transformações | 60 testes dbt aprovados na base real e isolada, mais 7 testes Python do contexto |
+| Permissões locais | Publicação e catálogo executados como usuário local; artefatos editáveis e removíveis sem sudo |
+
+Os números descrevem a carga e os cenários validados nesta implementação. Não são
+limites fixos para novas cargas nem medições de desempenho. Os testes da frente verificam
+as transformações; não substituem a suíte ampla de qualidade de dados.
+
+### O que surpreendeu ou exigiu ajuste
+
+- Datas fiscais inválidas poderiam deslocar a competência se o mês fosse derivado delas.
+- Histórico do Delta e histórico observado de fornecedor não substituem a filiação vigente
+  de um parlamentar em 2024; cada tipo de histórico responde a uma pergunta diferente.
+- A primeira implementação não respondia à comparação central por partido e UF. A revisão
+  da pergunta levou à inclusão do contexto oficial, sem recorrer ao cadastro atual.
+- Documentos distintos podem repetir a mesma sessão. Contar linhas em vez de sessões
+  distintas duplicaria presenças.
+- Executar dbt como root deixava artefatos locais sem permissão de limpeza pelo usuário.
+
+### O que foi decidido
+
+- Manter o PostgreSQL como destino dos marts, com dbt e camadas separadas do OLTP.
+- Preservar fatos detalhados e mensais, com grão declarado e valores reconciliados.
+- Guardar mudanças observadas de fornecedor com SCD tipo 2.
+- Comparar competências usando outros senadores do grupo com lançamentos, sem preencher
+  meses ausentes com zero e sem atribuir arbitrariamente um partido a meses de transição.
+- Preservar as evidências documentais de presença e deixar as limitações de cobertura
+  explícitas para os consumidores.
+- Entregar comandos, catálogo e contratos às demais frentes, sem declarar agendamento,
+  freshness, SLA, otimização ou painel como concluídos por este trabalho.
+
+## Semana de 2 a 10/11 — orquestração
+
+### Atividades de 7/11
+
+**Manuella** criou a verificação de freshness operacional (`analytics/src/freshness.py`):
+idade do último sucesso registrado em `monitoring.pipeline_runs`, com relógio do banco,
+saída JSON e códigos 0/1/2. Em seguida subiu o Airflow 3.4 no Compose, com banco de
+metadados próprio, e os DAGs `inflow_pipeline` (diário às 06h, ingestão → lake →
+freshness) e `inflow_freshness` (horário, independente da carga). A primeira execução
+real usou as 21.430 despesas existentes.
+
+**Yzabella** parametrizou a ingestão por intervalo de anos (`INGESTION_START_YEAR`,
+`INGESTION_END_YEAR`), já que a API da CEAPS é anual, e criou o DAG manual
+`inflow_backfill`, que valida o intervalo antes de tocar na origem e sempre rematerializa
+o lake completo. O pool `inflow_exclusivo`, com uma vaga, impede que backfill e carga
+diária escrevam ao mesmo tempo. Também escreveu os testes de contrato do backfill, o teste
+de idempotência em PostgreSQL descartável e o parâmetro `--pipeline` do freshness.
+
+### Atividades de 8/11
+
+**Manuella** adicionou callbacks de retry e de falha definitiva em JSON, sem o texto da
+exceção, e revisou o SLA para 26 horas (agenda diária mais duas horas de margem). Criou o
+harness `validate_runtime.py`, que roda cenários reais em um projeto Docker isolado, e
+coletou as evidências de backfill, retry, retries esgotados, SLA e agendador.
+
+### Atividades de 10/11
+
+**Manuella** integrou as transformações ao DAG: dbt em venv próprio na imagem do Airflow,
+tarefa `transformar_modelos` (`dbt build`) depois do lake, registro como `dbt_models` em
+`monitoring.pipeline_runs` e uma segunda checagem de freshness para os modelos. Antes
+disso, corrigiu o `docker-compose.yml`, que o merge da `develop` havia corrompido,
+misturando os serviços `airflow` e `modeling`. A validação foi repetida com o dbt.
+
+### O que foi medido
+
+| Verificação da frente de orquestração | Resultado registrado |
+|---|---|
+| Backfill 2024 a partir de banco vazio (8/11) | 0 → 21.449 despesas, R$ 32.290.271,35; PostgreSQL = Delta |
+| Backfill repetido (8/11 e 10/11) | Contagem, IDs e soma inalterados no OLTP, no Delta e em `fct_despesas` |
+| Retry | Lake derrubado com o banco fora: tentativa 1 `up_for_retry`, tentativa 2 `success` |
+| Retries esgotados | Três falhas; modelos e freshness `upstream_failed` |
+| Falha real do dbt | Três tentativas reprovadas, checagens bloqueadas, três registros `dbt_models=failed` |
+| Agendador | Runs `scheduled__2026-11-08T23:49:00+00:00` e, já com dbt, `scheduled__2026-11-11T00:35:00+00:00` com sucesso, sem trigger manual |
+| SLA (lake e modelos) | 26 h `fresh` (código 0); 0,001 h `stale` (código 1); sem execuções `missing` |
+| Duração | Ingestão de 2024 de 67 a 212 s; lake em ~1 s; `dbt build` de 14 a 17 s |
+| Testes | 18 no contêiner do Airflow, 11 de freshness, 7 do período de ingestão; em clone limpo, `make airflow-test`, `make test-lake` e os 223 testes dbt de `make test-models` |
+
+O total passou de 21.430 para 21.449 entre 7 e 8/11 por mudança na fonte; as execuções
+repetidas bateram entre si. Run IDs e detalhes estão no
+[guia do Airflow](https://github.com/DaniloNavesS/inflow/blob/develop/orchestration/README.md).
+
+### O que surpreendeu ou exigiu ajuste
+
+- O `merge_snapshot` do Delta trata ausências como exclusões: o backfill nunca pode
+  enviar um recorte, só o lake completo.
+- O merge da `develop` intercalou dois serviços do Compose sem conflito textual; o arquivo
+  continuava sendo YAML, mas com chaves duplicadas e o Airflow sem variáveis.
+- A primeira execução do dbt pelo Airflow falhou em um teste de qualidade: `mes` virou
+  `smallint` na otimização e `generate_series(smallint, smallint)` é ambíguo no
+  PostgreSQL 15. Os dois PRs passaram isoladamente; a orquestração revelou a combinação.
+- Um sucesso do lake mascararia uma falha dos modelos se houvesse uma só métrica.
+
+### O que foi decidido
+
+- Uma tarefa `dbt build` em vez de `dbt run` e `dbt test` separados: é o comando que a
+  equipe já usa e executa snapshot, seeds e testes na ordem do grafo.
+- Freshness separada por pipeline (`analytics_lake` e `dbt_models`), com o mesmo SLA.
+- Validação sempre em projeto Docker isolado, sem tocar na base local.
+- Alertas apenas em log estruturado; nenhum serviço externo nesta entrega.
+
+### Evidências por grupo
+
+#### Modelagem e transformações — Ana e Danilo
+
+- [PR #35 — integração da modelagem](https://github.com/DaniloNavesS/inflow/pull/35).
+- [dbt, fatos, dimensões e histórico](https://github.com/DaniloNavesS/inflow/commit/5a71a84).
+- [Testes isolados e comandos de execução](https://github.com/DaniloNavesS/inflow/commit/f0033db).
+- [Comissões e estrutura de gabinete](https://github.com/DaniloNavesS/inflow/commit/74cce52).
+- [Execução com UID/GID local](https://github.com/DaniloNavesS/inflow/commit/d7b406e).
+- [Presenças documentais](https://github.com/DaniloNavesS/inflow/commit/4b6ee65).
+- [Contexto histórico mensal](https://github.com/DaniloNavesS/inflow/commit/9b9742f).
+- [Comparação da pergunta central](https://github.com/DaniloNavesS/inflow/commit/ebe90f5).
+- [Guia e contratos dos modelos](/docs/modelagem-dbt).
+- [ADR 0004 — decisão de modelagem dimensional](/docs/adr/modelagem-dimensional-com-dbt).
+
+#### Orquestração — Yzabella e Manuella
+
+- [Freshness operacional com SLA](https://github.com/DaniloNavesS/inflow/commit/3d34383) e [Airflow com os DAGs diário e de freshness](https://github.com/DaniloNavesS/inflow/commit/646b991) — Manuella.
+- [Período de ingestão](https://github.com/DaniloNavesS/inflow/commit/3eaaf10), [DAG de backfill e pool](https://github.com/DaniloNavesS/inflow/commit/56fc46f), [testes de backfill e idempotência](https://github.com/DaniloNavesS/inflow/commit/50f6d11) e [freshness por pipeline](https://github.com/DaniloNavesS/inflow/commit/bc62641) — Yzabella.
+- [Callbacks de retry e falha](https://github.com/DaniloNavesS/inflow/commit/cb9bfa4), [SLA de 26 h](https://github.com/DaniloNavesS/inflow/commit/9398970) e [validação real](https://github.com/DaniloNavesS/inflow/commit/ca195f7) — Manuella.
+- Correção do Compose, integração do dbt e validação com modelos — Manuella.
+- [Guia do Airflow, com Run IDs das validações](https://github.com/DaniloNavesS/inflow/blob/develop/orchestration/README.md).
+
+#### Qualidade — Victor
+
+- [PR #37 — suíte de qualidade dos dados](https://github.com/DaniloNavesS/inflow/pull/37).
+- [Testes por dimensão, limites, relatório e prova de detecção](https://github.com/DaniloNavesS/inflow/commit/e046a65).
+- Cast em `competencias_sem_lacunas` após a integração com a otimização: [Yan](https://github.com/DaniloNavesS/inflow/commit/e5c632a) e [Manuella](https://github.com/DaniloNavesS/inflow/commit/c895685).
+- [Guia de qualidade dos dados](/docs/qualidade-dos-dados).
+- Testes genéricos em `analytics/dbt/tests/generic/`, singulares em `analytics/dbt/tests/qualidade/`,
+  defeitos injetados em `tests/modeling/quality_defects.sql` e relatório em
+  `scripts/quality/relatorio_qualidade.py`.
+
+#### Otimização — Vilmar
+
+- [Otimização de consultas: planos antes/depois e comparação de granularidades](/docs/otimizacao-consultas).
+- [ADR 0005 — granularidade da fato e índice por plano de execução](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao).
+- [Plano original, antes do índice](/data/adr-0005/planos/Q1_original_antes_do_indice.txt) e
+  [plano depois do índice](/data/adr-0005/planos/Q1_depois_detalhada_com_indice.txt).
+- [Resumo da medição completa](/data/adr-0005/resumo.txt), gerado pelo script.
+- Índice e `post_hook` em `analytics/dbt/models/marts/fct_despesas.sql`.
+- Script de medição `scripts/adr/0005_planos_execucao.sh` e planos versionados em
+  `documentation/static/data/adr-0005/`.
+
+#### Painel — Yan
+
+- [Guia do painel: como executar, perguntas, modelos, limitações e telas](/docs/painel).
+- Código em `painel/`, testes em `tests/painel/` e comandos `make painel` e `make test-painel`.
+
+## Demais frentes
+
+| Frente | Atividades | O que foi medido | Decisões e evidências |
+|---|---|---|---|
+| Qualidade — Victor | Contratos de esquema em 9 fontes e 20 marts; volume mínimo, entre camadas e por mês; unicidade do grão natural; 15 regras de negócio por linha; testes do histórico (SCD2 de fornecedores e contexto mensal de partido/UF); faixas, proporções, concentração e meses sem lançamentos; relatório `make quality` | 189 testes dbt (antes 40): esquema 29, volume 16, unicidade 32, integridade 80, histórico 7, distribuição 25; 12 defeitos injetados, todos detectados com `FAIL`; com limites de produção, a fixture reprova só em volume e distribuição; 7 testes Python do relatório | Testes dentro do dbt, sem pacotes externos; tipo por família em vez do nome exato; erro para regras estruturais e aviso para sinais estatísticos; testes na origem como disjuntor; [guia de qualidade](/docs/qualidade-dos-dados) |
+| Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
+| Painel — Yan | Painel em abas (gastos, comissões e gabinete, presença) sobre os marts do dbt, com conexão somente leitura; perguntas 4 e 10 refeitas com o partido/UF da competência; correção do teste `competencias_sem_lacunas`, que impedia a publicação dos marts; pergunta 7 restrita a comissões e subcomissões, pois a origem traz também frentes, grupos parlamentares e conselhos | `make test-painel`: consultas conferidas contra SQL direto nos marts, médias de 4 e 10 recalculadas a partir dos lançamentos e renderização de todas as abas; pergunta 7: máximo por senador de 53 para 15 e mediana de 16,5 para 6 (`make models` e consulta ao mart), com fixture de `make test-models` que falha se uma frente parlamentar entrar na contagem | Streamlit versionado no Git em vez de BI externo; média de grupo por senador-mês; competências fora do cálculo exibidas, não descartadas; recorte da pergunta 7 pelo nome do colegiado, combinado com o grupo no PR #39; [guia do painel](/docs/painel) |
+
+## Continuidade
+
+Os modelos e suas regras estão disponíveis para integração. Os próximos registros devem
+reunir as execuções e evidências das demais frentes, além da validação conjunta da E3.
+A orquestração está registrada acima, com retry, backfill, agendamento, freshness e SLA
+demonstrados. Qualidade, otimização e painel também estão registrados acima.

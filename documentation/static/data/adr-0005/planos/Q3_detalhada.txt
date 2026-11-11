@@ -1,0 +1,19 @@
+-- Cenário: Q3_detalhada (2026-11-09T02:31:05Z, 7 execuções)
+-- Tempos (ms): 18.213 20.289 21.393 24.586 25.427 27.130 29.905 
+-- SELECT senador_id, mes, sum(valor) AS valor_total, count(*) AS quantidade
+-- FROM analytics_marts.fct_despesas WHERE ano = 2024 GROUP BY senador_id, mes;
+
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=4642.06..4663.51 rows=1716 width=46) (actual time=20.808..21.128 rows=974 loops=1)
+   Group Key: senador_id, mes
+   Batches: 1  Memory Usage: 577kB
+   Buffers: shared hit=3029
+   ->  Seq Scan on fct_despesas  (cost=0.00..4426.96 rows=21510 width=12) (actual time=0.014..13.285 rows=21430 loops=1)
+         Filter: (ano = 2024)
+         Rows Removed by Filter: 90407
+         Buffers: shared hit=3029
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.134 ms
+ Execution Time: 21.393 ms

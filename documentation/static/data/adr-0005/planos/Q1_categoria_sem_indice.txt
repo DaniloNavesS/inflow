@@ -1,0 +1,23 @@
+-- Cenário: Q1_categoria_sem_indice (2026-11-09T02:30:55Z, 7 execuções)
+-- Tempos (ms): 0.957 1.040 1.170 1.212 1.264 1.434 1.948 
+-- SELECT mes, categoria_id, sum(valor_total) AS valor_total, sum(quantidade_despesas) AS quantidade
+-- FROM analytics_marts.agg_despesas_mensais WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=598.87..600.10 rows=40 width=99) (actual time=0.948..0.985 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=270
+   ->  Sort  (cost=598.87..598.99 rows=51 width=49) (actual time=0.940..0.943 rows=54 loops=1)
+         Sort Key: mes, categoria_id
+         Sort Method: quicksort  Memory: 29kB
+         Buffers: shared hit=270
+         ->  Seq Scan on agg_despesas_mensais  (cost=0.00..597.42 rows=51 width=49) (actual time=0.585..0.904 rows=54 loops=1)
+               Filter: ((senador_id = 581) AND (ano = 2025))
+               Rows Removed by Filter: 21774
+               Buffers: shared hit=270
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.093 ms
+ Execution Time: 1.040 ms

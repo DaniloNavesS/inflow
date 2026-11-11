@@ -23,6 +23,8 @@ make cdc-test          # Teste de propagação de eventos CDC (Postgres -> Kafka
 make cdc-semantics     # Teste de semântica de entrega e replay (At-least-once vs. Effectively-once)
 make cdc-replay-demo   # Demonstração comparativa de replay no terminal
 make test-lake        # Testes analíticos com PostgreSQL e lake descartáveis
+make test-models       # Modelos dbt + suíte de qualidade em PostgreSQL descartável
+make quality           # Qualidade dos marts publicados, resumida por dimensão
 ```
 
 ## Documentação
@@ -34,6 +36,16 @@ Após carregar a origem, execute `make ingestion && make lake` para materializar
 gestão com o PostgreSQL e registrar a execução em `monitoring.pipeline_runs`.
 Os resultados e tempos ficam em `lake/consumo.json`. Veja o
 [guia da camada analítica](documentation/docs/camada-analitica.mdx) para os limites e comandos.
+
+Para verificar o SLA operacional desde o último lake completo, execute
+`make lake-freshness` após construir a imagem analytics. O limite padrão é de
+26 horas (agenda diária com duas horas de margem operacional).
+
+A orquestração com Airflow sobe com `make airflow-up`. O DAG diário encadeia
+ingestão → lake → modelos dbt (`dbt build`) e verifica o SLA do lake e dos modelos
+separadamente; há também um DAG de backfill por intervalo de anos. Consulte o
+[guia do Airflow](orchestration/README.md) para acesso, execução manual, ativação
+dos agendamentos, backfill e evidências da validação.
 
 
 Use `make docs` para servir o Docusaurus em `http://localhost:3000`. Perguntas, fontes, endpoints,
@@ -139,3 +151,14 @@ monitoring
 ## Documentação
 
 A documentação completa do projeto, arquitetura, ADRs, modelo de dados e decisões técnicas está disponível no GitHub Pages do projeto.
+
+### Modelagem dimensional
+
+Após a ingestão, `make models` executa o dbt no PostgreSQL e publica fatos, dimensões,
+agregações mensais e histórico de fornecedores. `make test-models` valida a transformação
+em banco descartável. Veja os [contratos e limites da modelagem](documentation/docs/modelagem-dbt.mdx).
+
+A pergunta central de 2024 tem consultas em `scripts/sql/analytics/001_pergunta_central.sql`:
+gastos mensais, composição por categoria/fornecedor e comparação com outros senadores do
+mesmo partido e UF históricos. O contexto oficial de 2024 está versionado; para atualizar
+ou incluir outro ano, use `make models-context CONTEXT_YEAR=2024` antes de `make models`.

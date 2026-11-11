@@ -1,0 +1,740 @@
+version: 2
+# Testes de qualidade por dimensão (ver documentation/docs/qualidade-dos-dados.mdx):
+#   esquema      -> esquema_esperado            (contrato de colunas e tipos)
+#   volume       -> volume_minimo, volume_igual, volume_por_grupo
+#   unicidade    -> unique, unicidade_combinada (chave técnica e grão natural)
+#   integridade  -> not_null, relationships, accepted_values, regra_linha
+#   histórico    -> tests/qualidade/historico/  (SCD2 de fornecedores, contexto mensal)
+#   distribuição -> intervalo_valores, proporcao, concentracao_maxima
+# Limites nomeados (ex.: 'despesas_min') ficam em vars.limites_qualidade do dbt_project.yml.
+models:
+  - name: dim_senador
+    description: Cadastro atual do senador; partido e UF não são históricos.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas: {senador_id: inteiro, nome: texto, partido_atual: texto, uf_atual: texto}
+      - volume_minimo:
+          arguments:
+            minimo: senadores_min
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
+      - name: nome
+        tests: [not_null]
+      - name: uf_atual
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+                         'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+                         'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
+  - name: dim_fornecedor
+    description: Cadastro atual, preservando a identidade da origem inclusive sem documento.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas: {fornecedor_id: inteiro, documento: texto, razao_social: texto}
+      - volume_minimo:
+          arguments:
+            minimo: fornecedores_min
+    columns:
+      - name: fornecedor_id
+        tests: [unique, not_null]
+      - name: documento
+        description: CNPJ/CPF da origem; chave natural do fornecedor.
+        tests: [unique, not_null]
+  - name: dim_categoria_despesa
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas: {categoria_id: texto, tipo_despesa: texto}
+    columns:
+      - name: categoria_id
+        tests: [unique, not_null]
+      - name: tipo_despesa
+        tests: [unique, not_null]
+  - name: dim_calendario
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas: {data_id: data, ano: inteiro, mes: inteiro, dia: inteiro, trimestre: inteiro}
+      - regra_linha:
+          arguments:
+            expressao: "make_date(ano, mes, dia) = data_id and trimestre = extract(quarter from data_id)"
+    columns:
+      - name: data_id
+        tests: [unique, not_null]
+      - name: ano
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 2000, maximo: 2100}
+  - name: dim_fornecedor_historico
+    description: SCD tipo 2 por mudanças observadas; intervalos [observado_desde, observado_ate).
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              fornecedor_versao_id: texto
+              fornecedor_id: inteiro
+              documento: texto
+              razao_social: texto
+              observado_desde: instante
+              observado_ate: instante
+              versao_atual: booleano
+      - unicidade_combinada:
+          arguments:
+            colunas: [fornecedor_id, observado_desde]
+      - regra_linha:
+          arguments:
+            expressao: "versao_atual = (observado_ate is null)"
+    columns:
+      - name: fornecedor_versao_id
+        tests: [unique, not_null]
+      - name: fornecedor_id
+        tests: [not_null]
+      - name: observado_desde
+        tests: [not_null]
+  - name: fct_despesas
+    description: Uma linha por lançamento CEAPS. Valor em reais; ano e mês são competência da origem.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              despesa_id: inteiro
+              senador_id: inteiro
+              fornecedor_id: inteiro
+              data_despesa: data
+              ano: inteiro
+              mes: inteiro
+              tipo_despesa: texto
+              valor: decimal
+              atualizado_em: instante
+              competencia: data
+              data_documento_valida: booleano
+              categoria_id: texto
+              data_calendario: data
+              materializado_em: instante
+      - volume_minimo:
+          arguments:
+            minimo: despesas_min
+      - volume_por_grupo:
+          arguments:
+            grupo: competencia
+            fracao_minima_mediana: fracao_mediana_volume_mensal_min
+          config:
+            severity: warn
+      - regra_linha:
+          arguments:
+            expressao: "competencia = make_date(ano, mes, 1)"
+      - regra_linha:
+          arguments:
+            expressao: "(data_calendario is not null) = data_documento_valida"
+      - proporcao:
+          arguments:
+            condicao: "not data_documento_valida"
+            maximo: proporcao_data_documento_invalida_max
+      - proporcao:
+          arguments:
+            condicao: "valor = 0"
+            maximo: proporcao_valor_zero_max
+          config:
+            severity: warn
+      - concentracao_maxima:
+          arguments:
+            grupo: categoria_id
+            medida: valor
+            maximo: concentracao_categoria_max
+          config:
+            severity: warn
+      - concentracao_maxima:
+          arguments:
+            grupo: fornecedor_id
+            medida: valor
+            maximo: concentracao_fornecedor_max
+          config:
+            severity: warn
+    columns:
+      - name: despesa_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: fornecedor_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_fornecedor')
+                field: fornecedor_id
+      - name: categoria_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_categoria_despesa')
+                field: categoria_id
+      - name: competencia
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: data_calendario
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_calendario')
+                field: data_id
+      - name: valor
+        tests:
+          - not_null
+          - intervalo_valores:
+              arguments:
+                minimo: 0
+                maximo: valor_lancamento_max
+      - name: mes
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 1, maximo: 12}
+  - name: agg_despesas_mensais
+    description: Total mensal por senador e categoria; base das métricas de gestão.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              ano: inteiro
+              mes: inteiro
+              competencia: data
+              categoria_id: texto
+              valor_total: decimal
+              quantidade_despesas: inteiro
+              materializado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano, mes, categoria_id]
+      - volume_igual:
+          arguments:
+            comparar_com: ref('fct_despesas')
+            expressao_contagem: "count(distinct (senador_id, ano, mes, categoria_id))"
+    columns:
+      - name: quantidade_despesas
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 1}
+      - name: valor_total
+        tests:
+          - not_null
+          - intervalo_valores:
+              arguments: {minimo: 0}
+  - name: agg_despesas_mensais_fornecedor_categoria
+    description: Total mensal por senador, fornecedor e categoria.
+    tests:
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano, mes, fornecedor_id, categoria_id]
+      - volume_igual:
+          arguments:
+            comparar_com: ref('fct_despesas')
+            expressao_contagem: "count(distinct (senador_id, ano, mes, fornecedor_id, categoria_id))"
+  - name: gestao_maior_categoria
+    description: Categorias empatadas no maior gasto anual, com participação percentual no total CEAPS do senador.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              ano: inteiro
+              tipo_despesa: texto
+              valor_total: decimal
+              valor_total_ano: decimal
+              percentual_total_ano: decimal
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano, tipo_despesa]
+      - regra_linha:
+          arguments:
+            expressao: "valor_total <= valor_total_ano"
+    columns:
+      - name: valor_total_ano
+        description: Soma de todas as categorias do senador no ano de competência.
+      - name: percentual_total_ano
+        description: Percentual entre 0 e 100; nulo quando o total anual é zero.
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0, maximo: 100}
+  - name: gestao_media_mensal
+    description: Média dos totais mensais por senador e ano, contando somente meses com despesas.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              ano: inteiro
+              valor_total: decimal
+              meses_com_despesas: inteiro
+              media_mensal: decimal
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano]
+      - volume_igual:
+          arguments:
+            comparar_com: ref('fct_despesas')
+            expressao_contagem: "count(distinct (senador_id, ano))"
+    columns:
+      - name: meses_com_despesas
+        description: Quantidade de competências com lançamentos, inclusive lançamentos de valor zero.
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 1, maximo: 12}
+      - name: media_mensal
+        description: Valor total anual dividido pelos meses com despesas, em reais.
+        tests:
+          - not_null
+          - intervalo_valores:
+              arguments: {minimo: 0}
+  - name: dim_comissao
+    description: Cadastro de comissões do Senado e do Congresso.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas: {comissao_id: inteiro, sigla: texto, nome: texto, casa: texto}
+    columns:
+      - name: comissao_id
+        tests: [unique, not_null]
+  - name: fct_participacoes_comissao
+    description: Uma linha por participação da origem; cargos múltiplos não equivalem a comissões distintas.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              participacao_id: inteiro
+              senador_id: inteiro
+              comissao_id: inteiro
+              cargo: texto
+              data_inicio: data
+              data_fim: data
+              timestamp_ingestao: instante
+              inicio_conhecido: booleano
+              materializado_em: instante
+      - regra_linha:
+          arguments:
+            expressao: "data_fim is null or data_inicio is null or data_fim >= data_inicio"
+      - regra_linha:
+          arguments:
+            expressao: "inicio_conhecido = (data_inicio is not null)"
+    columns:
+      - name: participacao_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: comissao_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_comissao')
+                field: comissao_id
+  - name: fct_estrutura_gabinete
+    description: Um retrato de quantitativos por senador e ano da origem, sem identificar pessoas.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              estrutura_id: inteiro
+              senador_id: inteiro
+              ano: inteiro
+              qtd_pessoal_gabinete: inteiro
+              qtd_pessoal_escritorio: inteiro
+              qtd_total_servidores: inteiro
+              auxilio_moradia: booleano
+              imovel_funcional: booleano
+              atualizado_em: instante
+              materializado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano]
+      - regra_linha:
+          arguments:
+            expressao: "qtd_total_servidores = qtd_pessoal_gabinete + qtd_pessoal_escritorio"
+    columns:
+      - name: estrutura_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: qtd_pessoal_gabinete
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0}
+      - name: qtd_pessoal_escritorio
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0}
+  - name: gestao_comissoes_senador
+    description: Contagem distinta de comissões e subcomissões com vigência conhecida na referência (frentes, grupos parlamentares e conselhos ficam de fora); vínculos sem início são reportados separadamente.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              data_referencia: data
+              comissoes_com_vigencia_confirmada: inteiro
+              vinculos_sem_inicio_conhecido: inteiro
+      - volume_igual:
+          arguments:
+            comparar_com: ref('dim_senador')
+    columns:
+      - name: senador_id
+        tests: [unique, not_null]
+      - name: comissoes_com_vigencia_confirmada
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0}
+      - name: vinculos_sem_inicio_conhecido
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0}
+  - name: dim_sessao_plenaria
+    description: Sessões coletadas; a amostra não equivale à totalidade de sessões de uma legislatura.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              sessao_id: inteiro
+              numero: inteiro
+              data_sessao: data
+              tipo: texto
+              legislatura: inteiro
+              sessao_legislativa: inteiro
+              atualizado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [numero, data_sessao]
+      - volume_minimo:
+          arguments:
+            minimo: sessoes_min
+    columns:
+      - name: sessao_id
+        tests: [unique, not_null]
+  - name: dim_documento_dsf
+    description: Documentos do DSF com proveniência, páginas e status do parser, incluindo PARCIAL e FALHA.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              documento_dsf_id: inteiro
+              sessao_id: inteiro
+              codigo_diario: inteiro
+              numero_diario: inteiro
+              data_publicacao: data
+              url_documento: texto
+              pagina_inicial: inteiro
+              pagina_final: inteiro
+              sha256: texto
+              status_parser: texto
+              mensagem_parser: texto
+              atualizado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [codigo_diario, pagina_inicial, pagina_final]
+      - regra_linha:
+          arguments:
+            expressao: "pagina_final >= pagina_inicial and length(sha256) = 64"
+      - proporcao:
+          arguments:
+            condicao: "status_parser = 'FALHA'"
+            maximo: proporcao_documento_falha_max
+          config:
+            severity: warn
+    columns:
+      - name: documento_dsf_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+      - name: status_parser
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['SUCESSO', 'PARCIAL', 'FALHA']
+  - name: fct_registros_presenca
+    description: Uma linha por registro documental original; não cria ausências e preserva identidades não resolvidas.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              registro_presenca_id: inteiro
+              sessao_id: inteiro
+              documento_dsf_id: inteiro
+              senador_id: inteiro
+              nome_documento: texto
+              partido_documento: texto
+              uf_documento: texto
+              situacao: texto
+              voto_registrado: booleano
+              pagina: inteiro
+              resolucao: texto
+              atualizado_em: instante
+              data_sessao: data
+              status_parser: texto
+              sessao_documento_consistente: booleano
+              apto_contagem: booleano
+              materializado_em: instante
+      - volume_minimo:
+          arguments:
+            minimo: registros_presenca_min
+      - unicidade_combinada:
+          arguments:
+            colunas: [documento_dsf_id, nome_documento]
+      - regra_linha:
+          arguments:
+            expressao: "(resolucao = 'EXATA') = (senador_id is not null)"
+      - regra_linha:
+          arguments:
+            expressao: >-
+              not apto_contagem or (senador_id is not null and resolucao = 'EXATA'
+              and situacao = 'PRESENTE' and status_parser = 'SUCESSO'
+              and sessao_documento_consistente)
+      - proporcao:
+          arguments:
+            condicao: "resolucao = 'EXATA'"
+            minimo: proporcao_resolucao_exata_min
+          config:
+            severity: warn
+    columns:
+      - name: registro_presenca_id
+        tests: [unique, not_null]
+      - name: sessao_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_sessao_plenaria')
+                field: sessao_id
+      - name: documento_dsf_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_documento_dsf')
+                field: documento_dsf_id
+      - name: senador_id
+        description: Pode ser nulo se a identidade não foi resolvida na origem.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: situacao
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['PRESENTE', 'DESCONHECIDO']
+      - name: resolucao
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['EXATA', 'AMBIGUA', 'NAO_RESOLVIDA']
+      - name: apto_contagem
+        description: Presença com resolução EXATA, documento SUCESSO e sessão consistente; independe da marca de voto.
+        tests: [not_null]
+  - name: gestao_presencas_documentadas
+    description: Sessões distintas com presença documentada por senador e ano da sessão; não é taxa de comparecimento.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              ano: inteiro
+              sessoes_com_presenca_documentada: inteiro
+              registros_documentais: inteiro
+              registros_fora_contagem: inteiro
+              materializado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano]
+      - regra_linha:
+          arguments:
+            expressao: >-
+              sessoes_com_presenca_documentada <= registros_documentais
+              and registros_fora_contagem <= registros_documentais
+  - name: dim_contexto_parlamentar_mensal
+    description: Partido e UF oficiais unívocos durante os dias em exercício da competência; conflitos e lacunas são explícitos.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              contexto_id: texto
+              senador_id: inteiro
+              ano: inteiro
+              mes: inteiro
+              dias_exercicio: inteiro
+              partido_competencia: texto
+              uf_competencia: texto
+              status_partido: texto
+              status_uf: texto
+              source_url: texto
+              fonte_sha256: texto
+              coletado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano, mes]
+    columns:
+      - name: contexto_id
+        tests: [unique, not_null]
+      - name: status_partido
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['UNICO', 'MULTIPLOS', 'SEM_COBERTURA', 'SEM_EXERCICIO']
+      - name: status_uf
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['UNICO', 'MULTIPLOS', 'SEM_COBERTURA', 'SEM_EXERCICIO']
+      - name: mes
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 1, maximo: 12}
+  - name: fct_despesas_mensais
+    description: Uma linha por senador e competência com lançamentos, inclusive totais zero; ausência de lançamento não vira zero.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              senador_id: inteiro
+              ano: inteiro
+              mes: inteiro
+              competencia: data
+              valor_total: decimal
+              quantidade_despesas: inteiro
+              materializado_em: instante
+              mensal_id: texto
+              dias_exercicio: inteiro
+              partido_competencia: texto
+              uf_competencia: texto
+              status_partido: texto
+              status_uf: texto
+              em_exercicio_no_mes: booleano
+              contexto_source_url: texto
+              contexto_sha256: texto
+              contexto_coletado_em: instante
+      - unicidade_combinada:
+          arguments:
+            colunas: [senador_id, ano, mes]
+      - regra_linha:
+          arguments:
+            expressao: "em_exercicio_no_mes = coalesce(dias_exercicio > 0, false)"
+      - proporcao:
+          arguments:
+            condicao: "status_partido = 'NAO_COLETADO'"
+            maximo: proporcao_contexto_nao_coletado_max
+          config:
+            severity: warn
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+      - name: senador_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_senador')
+                field: senador_id
+      - name: valor_total
+        tests:
+          - not_null
+          - intervalo_valores:
+              arguments: {minimo: 0}
+  - name: gestao_comparacao_despesas_mensais
+    description: Gasto mensal comparado à média dos outros senadores do mesmo partido e UF históricos, na mesma competência.
+    tests:
+      - esquema_esperado:
+          arguments:
+            colunas:
+              mensal_id: texto
+              senador_id: inteiro
+              ano: inteiro
+              mes: inteiro
+              competencia: data
+              valor_total: decimal
+              quantidade_despesas: inteiro
+              dias_exercicio: inteiro
+              em_exercicio_no_mes: booleano
+              partido_competencia: texto
+              uf_competencia: texto
+              status_contexto_partido: texto
+              status_contexto_uf: texto
+              status_comparacao_partido: texto
+              status_comparacao_uf: texto
+              quantidade_pares_partido: inteiro
+              media_pares_partido: decimal
+              diferenca_media_partido: decimal
+              desvio_percentual_partido: decimal
+              acima_media_partido: booleano
+              quantidade_pares_uf: inteiro
+              media_pares_uf: decimal
+              diferenca_media_uf: decimal
+              desvio_percentual_uf: decimal
+              acima_media_uf: booleano
+              contexto_source_url: texto
+              contexto_sha256: texto
+              contexto_coletado_em: instante
+              materializado_em: instante
+      - volume_igual:
+          arguments:
+            comparar_com: ref('fct_despesas_mensais')
+      - regra_linha:
+          arguments:
+            expressao: "(status_comparacao_partido = 'COMPARAVEL') = (media_pares_partido is not null)"
+      - regra_linha:
+          arguments:
+            expressao: "(status_comparacao_uf = 'COMPARAVEL') = (media_pares_uf is not null)"
+    columns:
+      - name: mensal_id
+        tests: [unique, not_null]
+      - name: status_comparacao_partido
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['COMPARAVEL', 'SEM_PARES', 'UNICO', 'MULTIPLOS', 'SEM_COBERTURA',
+                         'SEM_EXERCICIO', 'NAO_COLETADO']
+      - name: status_comparacao_uf
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['COMPARAVEL', 'SEM_PARES', 'UNICO', 'MULTIPLOS', 'SEM_COBERTURA',
+                         'SEM_EXERCICIO', 'NAO_COLETADO']
+      - name: media_pares_partido
+        description: Exclui o próprio senador; nula se o contexto não é unívoco ou não existem pares com lançamentos.
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: 0}
+      - name: desvio_percentual_partido
+        description: 100 vezes a diferença sobre a média dos pares; nulo se a média é zero ou inexistente. Não classifica atipicidade ou irregularidade.
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: -100}
+      - name: desvio_percentual_uf
+        tests:
+          - intervalo_valores:
+              arguments: {minimo: -100}
