@@ -38,12 +38,17 @@ help:
 		'  make lake-check       Verifica DuckDB, Postgres e a pasta do lake' \
 		'  make lake-parquet     Materializa despesas_enriquecidas em Parquet' \
 		'  make lake             Materializa Parquet/Delta e compara consultas com o PostgreSQL' \
+		'  make lake-freshness   Verifica o SLA desde a última execução completa do lake' \
+		'  make airflow-up       Sobe o Airflow local em http://localhost:8080' \
+		'  make airflow-test     Testa a definição dos DAGs sem executar a ingestão' \
 		'  make lake-delta       Sincroniza despesas em Delta por id, preservando versões' \
 		'  make test-lake        Roda os testes da camada analítica' \
 		'  make models           Publica os modelos dimensionais com dbt' \
 		'  make models-docs      Gera catálogo e linhagem dos modelos dbt' \
 		'  make models-context   Atualiza contexto histórico oficial do ano (padrão 2024)' \
 		'  make test-models      Valida os modelos em PostgreSQL descartável' \
+		'  make quality          Roda os testes de qualidade nos modelos publicados e resume por dimensão' \
+		'  make quality-report   Resume por dimensão a última execução do dbt (build ou test)' \
 		'  make benchmark-lake   Compara PostgreSQL/Parquet/Delta/Iceberg por volume' \
 		'  make benchmark-lake-real Mede a base real do OLTP em sessão somente leitura' \
 		'  make docs             Serve a documentação' \
@@ -141,6 +146,21 @@ lake-delta: start build-analytics
 
 lake-consumption: lake
 
+.PHONY: lake-freshness
+lake-freshness:
+	$(COMPOSE) run --rm --no-deps analytics python freshness.py
+
+.PHONY: airflow-up airflow-test airflow-stop
+airflow-up:
+	$(COMPOSE) --profile orchestration up -d --build --wait airflow
+
+airflow-test:
+	$(COMPOSE) build airflow
+	$(COMPOSE) run --rm --no-deps airflow python -m unittest discover -s /opt/inflow/tests -v
+
+airflow-stop:
+	$(COMPOSE) stop airflow airflow-db
+
 lake-check: start
 	$(COMPOSE) run --rm analytics python main.py check
 
@@ -197,6 +217,18 @@ test-models:
 
 models-docs: start models-prepare
 	$(COMPOSE) run --build --rm modeling docs generate
+
+# Qualidade: testa os marts já publicados (sem reconstruir) e resume por dimensão.
+# run_results.json é apagado antes para que uma falha de conexão não reporte o resultado
+# de uma execução anterior. O código de saída vem do relatório: 1 se algum teste falhou.
+.PHONY: quality quality-report
+quality: start models-prepare
+	rm -f analytics/dbt/target/run_results.json
+	-$(COMPOSE) run --build --rm modeling test
+	python3 scripts/quality/relatorio_qualidade.py --target analytics/dbt/target
+
+quality-report:
+	python3 scripts/quality/relatorio_qualidade.py --target analytics/dbt/target
 
 CONTEXT_YEAR ?= 2024
 .PHONY: models-context

@@ -3,6 +3,7 @@ RUN pip install --no-cache-dir dbt-core==1.12.6 dbt-postgres==1.9.1
 WORKDIR /app/dbt
 COPY analytics/dbt/dbt_project.yml analytics/dbt/profiles.yml ./
 COPY analytics/dbt/models/ ./models/
+COPY analytics/dbt/macros/ ./macros/
 COPY analytics/dbt/snapshots/ ./snapshots/
 COPY analytics/dbt/tests/ ./tests/
 COPY analytics/dbt/seeds/ ./seeds/

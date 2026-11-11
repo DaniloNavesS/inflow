@@ -6,7 +6,7 @@ sidebar_position: 5
 
 # 0005: Granularidade da fato de despesas e índice decididos por plano de execução
 
-- **Status:** proposto
+- **Status:** aceito na implementação integrada pelo PR #38
 - **Data:** 2026-11-08
 - **Decisor:** Vilmar Fagundes, frente de otimização
 - **Entrega:** E3, consulta otimizada a partir do plano de execução e decisão de granularidade
