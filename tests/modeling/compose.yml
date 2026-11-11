@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: modeling_test
+      POSTGRES_USER: modeling_test
+      POSTGRES_PASSWORD: modeling_test
+    volumes:
+      - ../../scripts/sql/oltp:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U modeling_test -d modeling_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  modeling:
+    user: "${MODELING_UID:-1000}:${MODELING_GID:-1000}"
+    build:
+      context: ../..
+      dockerfile: analytics/dbt/Dockerfile
+    volumes:
+      - ./contexto_parlamentar.csv:/app/dbt/seeds/contexto_parlamentar.csv:ro
+    environment:
+      DB_HOST: postgres
+      DB_NAME: modeling_test
+      DB_USER: modeling_test
+      DB_PASSWORD: modeling_test
+    depends_on:
+      postgres:
+        condition: service_healthy

@@ -1,0 +1,105 @@
+name: mandato_aberto
+version: '1.0.0'
+config-version: 2
+profile: mandato_aberto
+model-paths: [models]
+snapshot-paths: [snapshots]
+test-paths: [tests]
+macro-paths: [macros]
+
+# Qualidade: limites dos testes de volume e distribuição, por perfil.
+# `producao` vale para a base carregada pela ingestão; `fixture` para a base sintética
+# de tests/modeling (quatro despesas). Trocar com --vars '{"perfil_qualidade": "fixture"}'.
+# Proporções são frações entre 0 e 1.
+vars:
+  perfil_qualidade: producao
+  limites_qualidade:
+    producao:
+      senadores_min: 81
+      fornecedores_min: 100
+      despesas_min: 1000
+      sessoes_min: 3
+      registros_presenca_min: 200
+      valor_lancamento_max: 1000000
+      proporcao_data_documento_invalida_max: 0.01
+      proporcao_valor_zero_max: 0.10
+      concentracao_categoria_max: 0.80
+      concentracao_fornecedor_max: 0.50
+      proporcao_resolucao_exata_min: 0.50
+      proporcao_documento_falha_max: 0.50
+      proporcao_contexto_nao_coletado_max: 0.05
+      fracao_mediana_volume_mensal_min: 0.25
+    fixture:
+      senadores_min: 0
+      fornecedores_min: 0
+      despesas_min: 0
+      sessoes_min: 0
+      registros_presenca_min: 0
+      valor_lancamento_max: 1000000
+      proporcao_data_documento_invalida_max: 0.50
+      proporcao_valor_zero_max: 0.50
+      concentracao_categoria_max: 1
+      concentracao_fornecedor_max: 1
+      proporcao_resolucao_exata_min: 0.50
+      proporcao_documento_falha_max: 0.50
+      proporcao_contexto_nao_coletado_max: 0.50
+      fracao_mediana_volume_mensal_min: 0.25
+
+# Testes singulares de qualidade ficam em tests/qualidade/<dimensão>/ e recebem a
+# dimensão como tag; os testes de reconciliação pré-existentes são de integridade.
+# Testes genéricos (YAML) são classificados pelo nome do teste; ver
+# scripts/quality/relatorio_qualidade.py.
+data_tests:
+  mandato_aberto:
+    qualidade:
+      +tags: [qualidade]
+      unicidade:
+        +tags: [unicidade]
+      historico:
+        +tags: [historico]
+      distribuicao:
+        +tags: [distribuicao]
+    historico_sem_sobreposicao:
+      +tags: [qualidade, historico]
+    medias_pares_origem:
+      +tags: [qualidade, integridade]
+    metricas_gestao_origem:
+      +tags: [qualidade, integridade]
+    reconciliacao_comparacao_mensal:
+      +tags: [qualidade, integridade]
+    reconciliacao_despesas:
+      +tags: [qualidade, integridade]
+    reconciliacao_institucional:
+      +tags: [qualidade, integridade]
+    reconciliacao_mensal:
+      +tags: [qualidade, integridade]
+    reconciliacao_presenca:
+      +tags: [qualidade, integridade]
+models:
+  mandato_aberto:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+seed-paths: [seeds]
+seeds:
+  mandato_aberto:
+    +schema: contexto
+    contexto_parlamentar:
+      +column_types:
+        senador_id: integer
+        ano: integer
+        mes: integer
+        dias_exercicio: integer
+        partido_competencia: text
+        uf_competencia: text
+        status_partido: text
+        status_uf: text
+        source_url: text
+        fonte_sha256: text
+        coletado_em: timestamp with time zone

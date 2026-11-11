@@ -1,0 +1,230 @@
+---
+title: Otimização de consultas
+sidebar_position: 10
+---
+
+# Otimização de consultas a partir do plano de execução
+
+Esta página registra a frente de otimização da E3: uma consulta de gestão otimizada com
+`EXPLAIN (ANALYZE, BUFFERS)` antes e depois, e a comparação de custo entre as granularidades
+publicadas pela [modelagem dbt](./modelagem-dbt.mdx). A decisão que resulta das medições está
+na [ADR 0005](./adr/0005-granularidade-da-fato-e-indice-por-plano-de-execucao.md).
+
+As medições usam a série CEAPS **2020–2025** (111.837 despesas) e os marts em
+`analytics_marts`. Os tempos estão bem abaixo da tolerância de 2 segundos da
+[caracterização da carga](./metrics/workload.md#latência-tolerada); o objetivo é que o custo
+das consultas não cresça junto com a série histórica.
+
+## Como ler os números
+
+- **Buffers** são páginas de 8 kB lidas pelo PostgreSQL. `shared hit` indica página já em
+  memória; `read`, página buscada no disco ou no cache do sistema. É a medida mais estável
+  de trabalho, porque não varia com a carga da máquina.
+- **Execution Time** varia entre execuções. Cada cenário roda 7 vezes após uma leitura de
+  aquecimento e registra a mediana. Em três execuções completas do script, os buffers se
+  repetiram exatamente e os tempos variaram; os tempos indicam a ordem de grandeza.
+- **Estimativa e real:** cada nó mostra `rows=` estimado (em `cost=`) e real (em `actual`).
+  Uma distância grande indica estatísticas ausentes ou desatualizadas.
+
+## A consulta otimizada
+
+Pergunta de gestão: quanto um senador gastou por mês e por categoria num ano. É a leitura
+típica de um painel por parlamentar. O exemplo usa o senador 581 em 2025, que tem 771 lançamentos.
+
+```sql
+SELECT mes, categoria_id, sum(valor) AS valor_total, count(*) AS quantidade
+FROM analytics_marts.fct_despesas
+WHERE senador_id = 581 AND ano = 2025
+GROUP BY mes, categoria_id
+ORDER BY mes, categoria_id;
+```
+
+### Antes: o plano mostra a tabela inteira para 771 linhas
+
+```text
+GroupAggregate  (rows=96) (actual rows=54)
+  Buffers: shared hit=3029
+  ->  Sort  (actual rows=771)  Sort Method: quicksort  Memory: 87kB
+        ->  Seq Scan on fct_despesas  (rows=737) (actual rows=771)
+              Filter: ((senador_id = 581) AND (ano = 2025))
+              Rows Removed by Filter: 111066
+              Buffers: shared hit=3029
+Execution Time: 11.814 ms
+```
+
+O plano é lido de baixo para cima. O Seq Scan lê as **3.029 páginas** da tabela e descarta
+**111.066 linhas** no filtro, 99,3% do que leu. O Sort ordena as 771 restantes e o
+GroupAggregate soma cada grupo. As estatísticas estão corretas (737 estimadas para 771 reais),
+então o planejador não errou: faltava uma estrutura que permitisse ler só as linhas pedidas.
+
+### A mudança: índice declarado no modelo dbt
+
+```sql
+{{ config(
+    indexes=[
+        {'columns': ['senador_id', 'ano', 'mes', 'categoria_id', 'valor']}
+    ],
+    post_hook="analyze {{ this }}"
+) }}
+```
+
+O índice fica no `config` de
+[`fct_despesas.sql`](https://github.com/DaniloNavesS/inflow/blob/develop/analytics/dbt/models/marts/fct_despesas.sql)
+porque o dbt recria a tabela a cada build; um `CREATE INDEX` manual desapareceria na
+execução seguinte. A ordem da chave atende a cada parte da consulta:
+
+| Colunas | Papel na consulta |
+|---|---|
+| `senador_id, ano` | Filtros de igualdade: o índice vai direto ao trecho do senador no ano |
+| `mes, categoria_id` | Dentro do trecho, as linhas saem na ordem do `GROUP BY` e do `ORDER BY`, sem Sort |
+| `valor` | Única coluna restante da consulta; com ela, o índice responde sem abrir a tabela |
+
+A dbt-postgres 1.9.1 não oferece `INCLUDE` na configuração de índices. Por isso `valor`
+entra como última coluna da chave, com o mesmo efeito de cobertura.
+
+### Depois: Index Only Scan, sem Sort
+
+```text
+GroupAggregate  (rows=96) (actual rows=54)
+  Buffers: shared hit=10
+  ->  Index Only Scan using 57b40ac36644b7261b2be8b361fd63af on fct_despesas
+        (rows=725) (actual rows=771)
+        Index Cond: ((senador_id = 581) AND (ano = 2025))
+        Heap Fetches: 0
+        Buffers: shared hit=10
+Execution Time: 0.483 ms
+```
+
+| | Antes | Depois |
+|---|---|---|
+| Acesso | Seq Scan com filtro | Index Only Scan com `Index Cond` |
+| Linhas descartadas | 111.066 | 0 |
+| Sort | sim | não |
+| Páginas da tabela abertas | 3.029 | 0 (`Heap Fetches: 0`) |
+| Buffers | **3.029** | **10** |
+| Mediana de 7 execuções | 11,8 ms | 0,66 ms |
+
+A consulta não mudou. A estrutura mudou, e o planejador escolheu um caminho que lê **303 vezes
+menos páginas**. O custo agora acompanha as 771 linhas da resposta, não as 111 mil da tabela.
+
+## Segundo achado: a tabela recém-publicada não tem estatísticas
+
+A primeira consulta após o `dbt build` que criou o índice teve outro plano:
+
+```text
+GroupAggregate  (rows=3) (actual rows=54)
+  ->  Sort  (rows=3) (actual rows=771)
+        ->  Bitmap Heap Scan on fct_despesas  (rows=3) (actual rows=771)
+              Heap Blocks: exact=35
+              ->  Bitmap Index Scan  (rows=3) (actual rows=771)
+Execution Time: 0.635 ms
+```
+
+O planejador estimou **3 linhas** para 771. O `CREATE TABLE AS` do dbt cria uma tabela sem
+estatísticas e sem mapa de visibilidade:
+
+- **Sem estatísticas**, as estimativas ficam erradas. Aqui o efeito foi pequeno, mas numa
+  consulta com junções uma estimativa de 3 linhas pode levar a um plano muito pior.
+- **Sem mapa de visibilidade**, o PostgreSQL não sabe se as linhas do índice são visíveis para
+  a transação e precisa conferir na tabela. Por isso usou Bitmap Heap Scan, abrindo 35 páginas.
+
+O `post_hook` com `analyze {{ this }}` resolve o primeiro problema dentro do próprio build: a
+estimativa passou a **699 linhas** na primeira consulta. O segundo depende de `VACUUM`, que o
+PostgreSQL não permite dentro de uma transação, e o dbt executa os hooks dentro de uma.
+O autovacuum completa o mapa pouco depois da publicação, e a consulta volta ao Index Only Scan.
+
+## Comparação das granularidades
+
+As quatro representações das despesas, publicadas pela modelagem:
+
+| Modelo | Uma linha é | Linhas | Páginas | Tamanho |
+|---|---|---:|---:|---:|
+| `fct_despesas` | lançamento | 111.837 | 3.029 | 24 MB + 7,3 MB de índice |
+| `agg_despesas_mensais_fornecedor_categoria` | senador × mês × fornecedor × categoria | 71.431 | 953 | 7,5 MB |
+| `agg_despesas_mensais` | senador × mês × categoria | 21.828 | 270 | 2,1 MB |
+| `fct_despesas_mensais` | senador × mês | 5.657 | 98 | 824 kB |
+
+O script confere com `EXCEPT ALL` que as granularidades devolvem o mesmo resultado para cada
+pergunta antes de comparar o custo. As três verificações têm zero linhas diferentes.
+
+| Consulta | Detalhada | Mensal por categoria | Mensal |
+|---|---|---|---|
+| Q1, seletiva, sem índice | 3.029 buffers, 11,8 ms | 270 buffers, 1,2 ms | — |
+| Q1, seletiva, com índice | **10 buffers, 0,66 ms** | 4 buffers, 0,19 ms | — |
+| Q2, média mensal por senador e ano | 3.029 buffers, 63,1 ms | 270 buffers, 14,9 ms | **98 buffers, 2,9 ms** |
+| Q3, total mensal por senador em 2024 | 3.029 buffers, 24,6 ms | 270 buffers, 5,1 ms | **98 buffers, 0,89 ms** |
+
+- **Consulta seletiva:** o índice pesa mais que a granularidade. Trocar de granularidade reduz
+  as páginas 11 vezes; o índice, 303 vezes. Com ele, a detalhada fica abaixo de 1 ms e a
+  diferença para a agregada deixa de ser relevante.
+- **Consulta ampla:** o índice não ajuda, e o planejador mantém Seq Scan mesmo com ele
+  disponível. O ganho vem de agregar menos linhas: a fato mensal lê 31 vezes menos páginas e
+  responde cerca de 20 a 30 vezes mais rápido.
+- **Um índice serve a uma família de consultas.** A Q3 filtra só por `ano` e não usa o índice,
+  cuja chave começa por `senador_id`.
+- **A mensal não substitui a detalhada.** Não responde por fornecedor, por data nem pelo
+  lançamento individual, e é calculada a partir dela.
+
+### Efeito do volume
+
+| Anos na tabela | Linhas | Sem índice | Com índice |
+|---:|---:|---|---|
+| 1 | 23.866 | 634 buffers, 2,3 ms | 11 buffers, 0,63 ms |
+| 3 | 64.118 | 1.730 buffers, 4,9 ms | 10 buffers, 0,59 ms |
+| 6 | 111.837 | 3.029 buffers, 10,0 ms | 10 buffers, 0,54 ms |
+
+Sem índice, o trabalho cresce com a tabela. Com índice, fica constante. As cópias são tabelas
+temporárias, então os tempos desta tabela só se comparam entre si.
+
+### Custo de publicação
+
+Comandos equivalentes aos do dbt, em transações desfeitas, mediana de 3 execuções:
+
+| Passo | Tempo |
+|---|---:|
+| Criar `fct_despesas` | 304 ms |
+| Criar o índice de `fct_despesas` | 141 ms |
+| Criar `agg_despesas_mensais` a partir da fato | 106 ms |
+| Criar `fct_despesas_mensais` a partir do agregado, sem a junção de contexto | 19 ms |
+
+## Consultas da pergunta central
+
+As três consultas de
+[`001_pergunta_central.sql`](https://github.com/DaniloNavesS/inflow/blob/develop/scripts/sql/analytics/001_pergunta_central.sql)
+também foram analisadas, sem alteração no arquivo:
+
+| Consulta | Linhas | Buffers | Mediana |
+|---|---:|---:|---:|
+| Comparação com os pares | 970 | 132 | 3,5 ms |
+| Detalhamento por fornecedor e categoria | 13.397 | 1.173 | 60,1 ms |
+| Auditoria dos estados de contexto | 3 | 130 | 0,82 ms |
+
+A primeira e a terceira já leem tabelas mensais pequenas. O detalhamento é o mais caro, mas o
+[plano](/data/adr-0005/planos/PC2_pergunta_central.txt) mostra que o acesso aos dados é a
+menor parte. Na execução registrada, de 44,8 ms, o Seq Scan do agregado termina em 4 ms, as
+junções com as dimensões em 19 ms, e o Sort de 13 mil linhas por nome e categoria em texto
+ocupa a maior parte do restante. Um índice não reduz esse custo, porque a ordem vem de colunas
+das dimensões. Se o painel filtrar por senador, o padrão de índice da Q1 se aplica.
+
+## Reproduzir
+
+Com os modelos publicados (`make models`), na raiz do repositório:
+
+```bash
+bash scripts/adr/0005_planos_execucao.sh
+```
+
+O script não altera os marts. O cenário sem índice desliga o uso de índices só na sessão, o
+índice da agregação mensal é criado numa transação desfeita e as cópias por volume são tabelas
+temporárias. Ele grava `resultados/adr-0005/resumo.md` e um plano completo por cenário em
+`resultados/adr-0005/planos/`, pasta ignorada pelo Git. `REPETICOES`, `SENADOR` e `ANO`
+podem ser alterados por variável de ambiente.
+
+A execução usada nesta página e na ADR está versionada em
+[resumo.txt](/data/adr-0005/resumo.txt) e em `documentation/static/data/adr-0005/planos/`,
+com os planos originais capturados durante o trabalho:
+
+- [Antes do índice](/data/adr-0005/planos/Q1_original_antes_do_indice.txt)
+- [Depois do índice](/data/adr-0005/planos/Q1_depois_detalhada_com_indice.txt)
+- [Logo após o build, sem estatísticas](/data/adr-0005/planos/Q1_logo_apos_build_sem_analyze.txt)
+- [Logo após o build, com `post_hook`](/data/adr-0005/planos/Q1_logo_apos_build_com_analyze.txt)

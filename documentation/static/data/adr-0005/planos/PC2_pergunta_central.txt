@@ -1,0 +1,50 @@
+-- Cenário: PC2_pergunta_central (2026-11-09T02:31:13Z, 7 execuções)
+-- Tempos (ms): 44.094 44.805 46.133 60.089 66.974 72.745 74.166 
+--    SELECT s.nome AS senador, d.ano, d.mes, t.tipo_despesa,        f.fornecedor_id, f.razao_social AS fornecedor, d.valor_total, d.quantidade_despesas FROM analytics_marts.agg_despesas_mensais_fornecedor_categoria d JOIN analytics_marts.dim_senador s USING (senador_id) JOIN analytics_marts.dim_fornecedor f USING (fornecedor_id) JOIN analytics_marts.dim_categoria_despesa t USING (categoria_id) JOIN analytics_marts.fct_despesas_mensais m   ON m.senador_id=d.senador_id AND m.ano=d.ano AND m.mes=d.mes WHERE d.ano=2024 AND m.em_exercicio_no_mes ORDER BY d.mes, s.nome, t.tipo_despesa, d.valor_total DESC, d.fornecedor_id;
+
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2651.00..2655.65 rows=1858 width=160) (actual time=41.755..42.792 rows=13397 loops=1)
+   Sort Key: d.mes, s.nome, t.tipo_despesa, d.valor_total DESC, f.fornecedor_id
+   Sort Method: quicksort  Memory: 3236kB
+   Buffers: shared hit=1173
+   ->  Hash Join  (cost=540.88..2550.12 rows=1858 width=160) (actual time=3.628..18.688 rows=13397 loops=1)
+         Hash Cond: (d.categoria_id = t.categoria_id)
+         Buffers: shared hit=1173
+         ->  Hash Join  (cost=539.70..2523.39 rows=1858 width=113) (actual time=3.595..15.210 rows=13397 loops=1)
+               Hash Cond: (d.fornecedor_id = f.fornecedor_id)
+               Buffers: shared hit=1172
+               ->  Hash Join  (cost=178.89..2137.04 rows=1858 width=74) (actual time=0.844..8.614 rows=13397 loops=1)
+                     Hash Cond: ((d.senador_id = s.senador_id) AND (d.mes = m.mes))
+                     Buffers: shared hit=1053
+                     ->  Seq Scan on agg_despesas_mensais_fornecedor_categoria d  (cost=0.00..1845.89 rows=13320 width=63) (actual time=0.003..3.963 rows=13404 loops=1)
+                           Filter: (ano = 2024)
+                           Rows Removed by Filter: 58027
+                           Buffers: shared hit=953
+                     ->  Hash  (cost=176.38..176.38 rows=167 width=27) (actual time=0.828..0.832 rows=970 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 66kB
+                           Buffers: shared hit=100
+                           ->  Hash Join  (cost=5.38..176.38 rows=167 width=27) (actual time=0.051..0.660 rows=970 loops=1)
+                                 Hash Cond: (m.senador_id = s.senador_id)
+                                 Buffers: shared hit=100
+                                 ->  Seq Scan on fct_despesas_mensais m  (cost=0.00..168.71 rows=167 width=8) (actual time=0.003..0.479 rows=970 loops=1)
+                                       Filter: (em_exercicio_no_mes AND (ano = 2024))
+                                       Rows Removed by Filter: 4687
+                                       Buffers: shared hit=98
+                                 ->  Hash  (cost=3.50..3.50 rows=150 width=19) (actual time=0.040..0.042 rows=150 loops=1)
+                                       Buckets: 1024  Batches: 1  Memory Usage: 16kB
+                                       Buffers: shared hit=2
+                                       ->  Seq Scan on dim_senador s  (cost=0.00..3.50 rows=150 width=19) (actual time=0.003..0.012 rows=150 loops=1)
+                                             Buffers: shared hit=2
+               ->  Hash  (cost=226.47..226.47 rows=10747 width=39) (actual time=2.688..2.689 rows=10747 loops=1)
+                     Buckets: 16384  Batches: 1  Memory Usage: 878kB
+                     Buffers: shared hit=119
+                     ->  Seq Scan on dim_fornecedor f  (cost=0.00..226.47 rows=10747 width=39) (actual time=0.003..0.761 rows=10747 loops=1)
+                           Buffers: shared hit=119
+         ->  Hash  (cost=1.08..1.08 rows=8 width=113) (actual time=0.022..0.022 rows=8 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 10kB
+               Buffers: shared hit=1
+               ->  Seq Scan on dim_categoria_despesa t  (cost=0.00..1.08 rows=8 width=113) (actual time=0.009..0.011 rows=8 loops=1)
+                     Buffers: shared hit=1
+ Planning Time: 0.348 ms
+ Execution Time: 44.805 ms

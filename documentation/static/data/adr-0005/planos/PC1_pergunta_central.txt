@@ -1,0 +1,24 @@
+-- Cenário: PC1_pergunta_central (2026-11-09T02:31:11Z, 7 execuções)
+-- Tempos (ms): 2.838 3.368 3.503 3.525 3.603 4.228 4.980 
+--  SELECT s.nome AS senador, c.ano, c.mes, c.valor_total,        c.partido_competencia, c.uf_competencia, c.dias_exercicio,        c.status_comparacao_partido, c.quantidade_pares_partido,        c.media_pares_partido, c.diferenca_media_partido, c.desvio_percentual_partido,        c.status_comparacao_uf, c.quantidade_pares_uf,        c.media_pares_uf, c.diferenca_media_uf, c.desvio_percentual_uf FROM analytics_marts.gestao_comparacao_despesas_mensais c JOIN analytics_marts.dim_senador s USING (senador_id) WHERE c.ano=2024 AND c.em_exercicio_no_mes ORDER BY c.mes, c.valor_total DESC, c.senador_id;
+
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=214.55..214.97 rows=167 width=146) (actual time=3.178..3.218 rows=970 loops=1)
+   Sort Key: c.mes, c.valor_total DESC, c.senador_id
+   Sort Method: quicksort  Memory: 214kB
+   Buffers: shared hit=132
+   ->  Hash Join  (cost=5.38..208.38 rows=167 width=146) (actual time=0.333..0.769 rows=970 loops=1)
+         Hash Cond: (c.senador_id = s.senador_id)
+         Buffers: shared hit=132
+         ->  Seq Scan on gestao_comparacao_despesas_mensais c  (cost=0.00..200.71 rows=167 width=131) (actual time=0.270..0.484 rows=970 loops=1)
+               Filter: (em_exercicio_no_mes AND (ano = 2024))
+               Rows Removed by Filter: 4687
+               Buffers: shared hit=130
+         ->  Hash  (cost=3.50..3.50 rows=150 width=19) (actual time=0.045..0.046 rows=150 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 16kB
+               Buffers: shared hit=2
+               ->  Seq Scan on dim_senador s  (cost=0.00..3.50 rows=150 width=19) (actual time=0.005..0.015 rows=150 loops=1)
+                     Buffers: shared hit=2
+ Planning Time: 0.100 ms
+ Execution Time: 3.603 ms

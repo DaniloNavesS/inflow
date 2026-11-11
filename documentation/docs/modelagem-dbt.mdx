@@ -1,0 +1,422 @@
+---
+title: Modelagem dimensional com dbt
+sidebar_position: 9
+---
+
+# Modelagem dimensional com dbt
+
+Ana e Danilo implementam as transformações em `analytics/dbt`. O dbt publica modelos
+no PostgreSQL, em schemas separados de `oltp`; o lake Parquet/Delta existente permanece
+independente. A escolha permite consumir os marts com ferramentas PostgreSQL e comparar
+as granularidades detalhada e mensal com `EXPLAIN (ANALYZE, BUFFERS)`. Essa comparação
+e a consulta otimizada estão em [Otimização de consultas](./otimizacao-consultas.mdx).
+
+## Executar
+
+Depois de configurar `.env` e carregar a origem com `make ingestion`:
+
+```bash
+make models
+make test-models
+make models-docs
+```
+
+`make models` constrói a imagem e executa `dbt build` (modelos, snapshot e testes na ordem
+do grafo). Não chama a API do Senado. É preciso repetir o comando após atualizar a origem.
+O serviço `modeling` recebe as mesmas variáveis do banco que os serviços existentes;
+nenhuma senha é gravada no perfil. O alvo é `local`, com prefixo `analytics`.
+
+`make test-models` usa outro projeto Compose e banco descartável, sem portas ou volumes
+persistentes compartilhados. Valida dados sintéticos, reexecução sem mudanças, correção
+cadastral, preservação da versão anterior, média, empate e data inválida. Não chama APIs.
+
+## Camadas e contratos
+
+| Schema | Conteúdo |
+|---|---|
+| `analytics_staging` | Views das fontes de despesas, cadastros, comissões, gabinete e DSF |
+| `analytics_intermediate` | Preparação de chaves de categoria e sinalização de datas |
+| `analytics_history` | Snapshot persistente `fornecedores_historico` |
+| `analytics_marts` | Tabelas de fatos, dimensões, agregações e respostas de gestão |
+
+| Modelo | Uma linha por |
+|---|---|
+| `fct_despesas` | ID oficial do lançamento CEAPS |
+| `dim_senador` | Senador, com partido e UF atuais explicitamente nomeados |
+| `dim_fornecedor` | Identidade do fornecedor no OLTP |
+| `dim_fornecedor_historico` | Versão observada do cadastro de fornecedor |
+| `dim_categoria_despesa` | Tipo de despesa, identificado por MD5 do texto original |
+| `dim_calendario` | Dia entre os extremos de datas válidas e competências carregadas |
+| `agg_despesas_mensais` | Senador × ano × mês × categoria |
+| `gestao_media_mensal` | Senador × ano, média somente entre meses com despesas |
+| `gestao_maior_categoria` | Senador × ano × categoria empatada no maior total |
+
+Os fatos referenciam as dimensões atuais por `senador_id`, `fornecedor_id`, `categoria_id`
+e o calendário por `competencia` ou `data_calendario`. Não unir o fato ao histórico apenas
+por `fornecedor_id`: isso multiplicaria linhas. Para cadastro atual, usar `dim_fornecedor`.
+
+Valores mantêm a precisão NUMERIC da origem. Competência usa `ano`/`mes`, sem derivar da
+data fiscal. `data_despesa` sempre preserva o original; documentos fora de 2000–2100
+recebem `data_documento_valida=false` e `data_calendario=NULL`, sem excluir valores das
+métricas. O calendário cobre os intervalos válidos completos e fica vazio se não houver dados.
+
+`materializado_em` indica quando a fato foi construída e é propagado para a agregação;
+não representa frescor da API nem sucesso global do pipeline. As tabelas de gestão
+preservam as regras de `analytics/src/consumption.py` (meses com despesas e empates).
+
+## Histórico: tempo de observação
+
+O snapshot usa `strategy=check` em `documento` e `razao_social`, com chave `fornecedor_id`.
+Mudança encerra uma versão e cria outra; reexecução idêntica não cria versões. Exclusão
+encerra a versão atual. `fornecedor_versao_id` identifica a versão; os intervalos são
+inclusivos no início e exclusivos no fim, sendo o fim nulo para registros atuais.
+
+Esse é histórico SCD tipo 2 observado desde a primeira execução, conforme a estratégia de
+[snapshots do dbt](https://docs.getdbt.com/docs/build/snapshots). Não recupera alterações
+anteriores, nem mudanças ocorridas entre execuções. Não descreve a empresa na data de uma
+despesa passada. Por isso a fato não recebe uma chave histórica artificial para documentos
+anteriores ao início da observação. Para consultar um retrato cadastral observado, filtrar
+`observado_desde <= instante` e `(observado_ate > instante OR observado_ate IS NULL)`.
+
+As migrações antigas de mandatos e filiações não são fontes deste projeto dbt: o caminho
+atual de ingestão não as preenche. A classificação histórica mensal usa o seed oficial
+descrito na seção da pergunta central, sem inferência do cadastro atual. O histórico de
+fornecedores é independente e atende ao requisito de dimensão de variação lenta.
+
+O snapshot é persistente: não apagar `analytics_history` entre execuções. Os demais
+modelos são reconstruídos integralmente, opção proporcional ao volume atual. O comando
+não publica todos os marts numa única transação; consumidores devem consultar após uma
+execução concluída, sem ingestão concorrente. Falha pode deixar modelos de execuções distintas.
+
+## Integrações com a equipe
+
+- Orquestração: executar `make models` após ingestão bem-sucedida; usar saída não zero para
+  detectar falhas. Agendamento, retry, backfill e SLA pertencem à frente de orquestração.
+- Qualidade: a suíte de esquema, volume, unicidade, integridade, histórico e distribuição
+  roda junto dos modelos; ver [Qualidade dos dados](./qualidade-dos-dados.mdx). Coluna nova
+  em um mart precisa entrar no contrato `esquema_esperado` do modelo.
+- Otimização: comparar `fct_despesas` e `agg_despesas_mensais` usando o mesmo agrupamento
+  e filtros de competência; a mensal não permite detalhar fornecedor ou documento.
+- Painel: consumir `analytics_marts`; documentar que partido/UF são atuais. Para média e
+  categoria vencedora, usar os modelos `gestao_*`. Associar indicador de última execução
+  bem-sucedida ao monitoramento quando integrado pela frente de orquestração.
+
+## Validação da implementação
+
+`make test-models` passou com PostgreSQL 15, dbt-core 1.12.6 e dbt-postgres 1.9.1.
+Foram cinco execuções de `dbt build`: origem vazia, primeira carga, reexecução sem
+alteração, correção de nome e exclusão. Cada execução passou por 40 testes dbt, além das
+asserções SQL de comportamento. A suíte verifica lógica e persistência usando quatro
+despesas sintéticas; não mede desempenho nem comprova cobertura da base real.
+
+
+## Consumo e catálogo
+
+`gestao_maior_categoria` inclui `valor_total_ano` e `percentual_total_ano` (0 a 100).
+Todas as categorias empatadas são retornadas. Se o total do senador no ano for zero,
+o percentual é nulo, pois a participação é indefinida. A média mensal e as categorias
+vencedoras são reconciliadas diretamente contra o OLTP por um teste dbt independente
+da agregação mensal. Isso também protege contra divergências entre as granularidades.
+
+`make models` preserva `manifest.json`, `run_results.json` e SQL compilado em
+`analytics/dbt/target/`, além do log em `analytics/dbt/logs/`. São artefatos locais,
+ignorados pelo Git. `run_results.json` descreve a última invocação que o escreveu;
+para registrar sucesso, conferir o comando e seu código de saída, não apenas a presença
+do arquivo. Execuções concorrentes no mesmo diretório não são suportadas.
+
+`make models-docs` gera `catalog.json` e `index.html` no mesmo diretório. Para explorar
+localmente, executar em terminais separados:
+
+```bash
+# Gera o catálogo após uma publicação bem-sucedida
+make models-docs
+# Serve os arquivos gerados; abrir http://localhost:8080
+python3 -m http.server 8080 --bind 127.0.0.1 --directory analytics/dbt/target
+```
+
+O catálogo contém metadados, descrições e linhagem. O comando não agenda o pipeline nem
+atesta freshness da origem. Consultar primeiro os contratos deste guia ao construir o painel.
+
+## Validação na base local
+
+A publicação e a reconciliação na base real preservaram 21.430 despesas, com total de
+R$ 32.290.271,35; a agregação mensal produziu 3.889 linhas. Quatro datas fiscais fora
+da faixa válida foram sinalizadas sem excluir despesas. A primeira observação histórica
+registrou 3.516 fornecedores. Esses números descrevem a base local desta validação,
+não são limites fixos ou expectativas a impor a cargas futuras.
+
+
+## Comissões e estrutura de gabinete
+
+As fontes `oltp.comissoes`, `oltp.participacoes_comissao` e `oltp.estrutura_gabinete`
+também são transformadas pelo mesmo `make models`, com os seguintes contratos:
+
+| Modelo em `analytics_marts` | Granularidade |
+|---|---|
+| `dim_comissao` | Uma linha por comissão da origem |
+| `fct_participacoes_comissao` | Uma linha por ID de participação, com cargo e intervalo original |
+| `gestao_comissoes_senador` | Uma linha por senador na data de referência da execução |
+| `fct_estrutura_gabinete` | Uma linha por senador e ano informado pela origem |
+
+A pergunta 7 é atendida por `comissoes_com_vigencia_confirmada`: conta comissões
+distintas com início conhecido menor ou igual à referência e fim nulo ou maior ou igual
+à referência. Os limites são inclusivos. Dois cargos na mesma comissão não duplicam
+a contagem. Fim nulo significa intervalo aberto conforme a origem, sem comprovar que
+o vínculo continua ativo se a coleta estiver defasada.
+
+`vinculos_sem_inicio_conhecido` conta registros sem início cujo fim não exclui a referência.
+Eles não entram na contagem confirmada, pois a data de ingresso é desconhecida. Zero
+comissões confirmadas não garante ausência de vínculos: conferir esse campo e a cobertura
+da ingestão. Senadores sem registros continuam no resultado com contagens zero.
+
+A referência padrão é a data UTC do início da execução dbt, publicada na coluna
+`data_referencia`. Para reproduzir uma data específica:
+
+```bash
+docker compose run --build --rm modeling build --vars '{"data_referencia_comissoes": "2024-12-31"}'
+```
+
+Reprocessar outra referência substitui a tabela de gestão; os intervalos completos continuam
+na fato. Uma nova referência não recupera vínculos que a origem nunca coletou. `cargo` é o
+texto da fonte, não uma classificação de vagas. A pergunta 8 (vagas por partido vigente)
+não é inferida juntando esses vínculos ao partido atual do senador.
+
+A pergunta 12 pode consumir diretamente `fct_estrutura_gabinete`: `qtd_pessoal_gabinete`,
+`qtd_pessoal_escritorio` e `qtd_total_servidores` são quantitativos publicados, não cadastros
+individuais. Preservam-se também `auxilio_moradia` e `imovel_funcional`. Não somar anos
+para contar pessoas distintas; dado anual ausente não deve virar zero automaticamente.
+
+Para combinar despesas, comissões e gabinete em uma consulta, agregar cada fato na
+granularidade desejada antes da junção por senador. Unir fatos detalhados diretamente
+multiplicaria despesas por cargos e anos de gabinete.
+
+A validação acompanha somente a lógica implementada: reconciliação com as fontes,
+referências, contagem distinta de comissões, limites de vigência, início desconhecido e
+separação dos quantitativos anuais. Volume, distribuição, freshness e SLA continuam nas
+frentes responsáveis.
+
+Na base local, a reconciliação institucional preservou 425 comissões, 7.189 participações
+e 81 registros anuais de gabinete. A execução completa passou por 40 verificações dbt;
+a suíte isolada também passou nos cenários de origem vazia e reexecução. Esses volumes
+são observações da carga validada, não regras fixas para futuras execuções.
+
+## Permissões dos artefatos locais
+
+`make models` e `make models-docs` exportam `MODELING_UID` e `MODELING_GID` com os IDs
+do usuário que executa o Make e criam `target/` e `logs/` no host antes de iniciar o
+contêiner. O serviço usa esses IDs para gravar os artefatos. A imagem também tem usuário
+não root por padrão e diretórios internos graváveis por UIDs arbitrários, inclusive no
+ambiente de teste sem bind mounts. O código e o perfil permanecem sem escrita para esse usuário.
+
+Ao chamar Compose diretamente, preparar as pastas e informar os IDs (o padrão do serviço
+é `1000:1000`, que pode não corresponder ao seu usuário):
+
+```bash
+mkdir -p analytics/dbt/target analytics/dbt/logs
+export MODELING_UID="$(id -u)"
+export MODELING_GID="$(id -g)"
+docker compose run --build --rm modeling build
+```
+
+Os mounts não criam pastas automaticamente: diretórios ausentes exigem a preparação acima
+ou os comandos Make. Isso evita que o Docker crie diretórios locais pertencentes a root.
+Não executar esses comandos com sudo.
+
+Se uma execução anterior criou artefatos pertencentes a root, corrigir uma única vez
+somente a propriedade dos dois diretórios gerados. A execução root abaixo é restrita a
+essa reparação; não é usada para executar o dbt:
+
+```bash
+docker compose run --no-deps --rm --user 0:0 --entrypoint chown modeling \
+  -R "$(id -u):$(id -g)" /app/dbt/target /app/dbt/logs
+```
+
+Na validação da correção, os dois comandos Make passaram com UID/GID `1000:1000`;
+a escrita, edição e remoção integral de `target/` e `logs/` passaram no host como usuário
+local, sem sudo. Os comandos foram repetidos após remover os diretórios, validando também
+a preparação inicial. A suíte isolada foi executada com UID/GID `12345:12346`, para
+verificar os diretórios internos sem depender do usuário padrão da imagem.
+
+## Presenças documentadas no DSF
+
+As fontes `oltp.sessao_plenaria`, `oltp.documento_dsf` e `oltp.registro_presenca` são
+transformadas no mesmo comando `make models`:
+
+| Modelo em `analytics_marts` | Granularidade |
+|---|---|
+| `dim_sessao_plenaria` | Sessão coletada, com data e tipo originais |
+| `dim_documento_dsf` | Documento/intervalo de páginas cadastrado, com URL, SHA-256 e status do parser |
+| `fct_registros_presenca` | ID de registro extraído da origem, mesmo sem identidade resolvida |
+| `gestao_presencas_documentadas` | Senador identificado × ano da sessão |
+
+A fato mantém nome, partido e UF documentais, página, resolução de identidade, situação e
+marca de voto. Não substitui o partido documental pelo cadastro atual. `voto_registrado`
+pode ser falso ou nulo; não é condição de presença nem corresponde a um conjunto de
+votos nominais abertos individualizados. Os documentos `PARCIAL` e `FALHA` continuam na
+dimensão mesmo quando não possuem linhas extraídas.
+
+`apto_contagem=true` exige simultaneamente identidade não nula com resolução `EXATA`,
+situação `PRESENTE`, documento com parser `SUCESSO` e correspondência entre a sessão do
+registro e a sessão do documento. O modelo preserva inconsistências entre essas sessões
+na fato, sinalizando `sessao_documento_consistente=false` e excluindo a linha da contagem.
+Isso evita contar registros antigos que permaneceram na origem após uma falha do parser.
+
+A tabela de gestão conta sessões distintas em `sessoes_com_presenca_documentada`; duas
+linhas ou documentos da mesma sessão não duplicam a presença de um senador. Inclui também
+`registros_documentais` e `registros_fora_contagem` para tornar explícita a diferença entre
+linhas extraídas e evidências aceitas. Esses campos contam linhas, não sessões. Registros
+com senador nulo permanecem na fato e não recebem atribuição artificial no agregado.
+Senadores sem linhas documentais não são gerados no agregado; zero presenças aceitas
+entre registros existentes não significa ausência.
+
+O ano refere-se à data da sessão, não à data de publicação do DSF ou à competência CEAPS.
+As sessões mantêm seu tipo original: a contagem cobre as sessões coletadas, sem inferir
+que toda sessão seja deliberativa. Para um recorte por tipo ou período, filtrar a fato
+pela dimensão de sessão e contar sessões distintas com `apto_contagem=true`. O calendário
+existente cobre datas de despesas; datas de sessões são acessadas pela própria dimensão.
+
+Esta entrega não calcula taxa de assiduidade: as três sessões reais constituem uma amostra,
+e não há denominador de sessões às quais cada parlamentar estava obrigado a comparecer.
+Também não transforma falta de linha, parser falho ou identidade não resolvida em ausência.
+Os dados são base documental para a frente do painel, sem afirmar cobertura das perguntas
+5 e 6 sobre taxas.
+
+## Cobertura das perguntas de gestão
+
+| Perguntas | Situação dos modelos |
+|---|---|
+| 1 e 11: média mensal e categoria de maior parcela | Implementadas, com meses com despesas, empates e percentual anual |
+| 7: comissões por senador | Implementada por referência temporal, com limites de cobertura explicitados |
+| 12: quantitativo de pessoal | Fato anual implementada, preservando os quantitativos publicados |
+| 5 e 6: taxas de presença | Evidência documental modelada; taxa depende de cobertura e elegibilidade ainda ausentes |
+| Pergunta central: gastos e comparação com partido/UF | Implementada mensalmente com contexto oficial, pares explícitos e detalhamento por fornecedor/categoria |
+| 4 e 10: médias por partido e UF | Contexto mensal histórico e totais disponíveis para os grupos com classificação unívoca; definir o recorte no consumo |
+| 8: vagas por partido vigente | Ainda exige regra de vagas e atribuição temporal dos vínculos em comissões |
+| 9: votos nominais abertos | Indicador documental de voto não atende a granularidade de voto nominal |
+| 13: donos de fornecedores | Vínculos empresariais ainda não transformados em marts dbt |
+| 2 e 3: atipicidade por LLM | Classificação não é produzida pelos modelos atuais |
+
+O requisito de ferramenta, camadas, fatos, dimensões e pelo menos uma dimensão histórica
+está coberto. Cobrir todas as perguntas exige trabalho adicional de fontes e regras,
+que não deve ser confundido com a conclusão desse requisito básico de modelagem.
+
+Na validação local de presença, foram preservadas as 3 sessões, os 3 documentos e os
+220 registros da origem, incluindo 2 identidades não resolvidas. A regra conservadora
+aceitou 70 registros do documento `SUCESSO`; outros 150 pertencem a dois documentos
+`PARCIAL` e permanecem consultáveis na fato, fora da contagem. Não foram observadas
+sessões inconsistentes nessa amostra real. Os cenários sintéticos cobrem essa inconsistência,
+repetição de sessão em documentos distintos, presença sem voto e documentos sem linhas.
+A execução completa passou por 51 verificações dbt na base real e no ambiente isolado.
+
+## Pergunta central: comparação mensal por partido e UF
+
+A pergunta central da E1 é atendida pelo detalhamento mensal e pelo modelo
+`gestao_comparacao_despesas_mensais`. A classificação usa o histórico oficial de
+mandatos, exercício e filiações do Senado, sem atribuir o partido ou a UF atuais a
+uma despesa de 2024. O contexto é um recorte mensal versionado como seed dbt em
+`analytics/dbt/seeds/contexto_parlamentar.csv`, não uma nova infraestrutura de ingestão.
+
+### Regras decididas
+
+1. A unidade de comparação é **senador × competência CEAPS**. Somam-se as categorias
+   sem derivar competência da data fiscal, que pode estar errada. Não se somam médias.
+2. Os pares são **outros senadores com lançamentos na mesma competência**, em exercício
+   em pelo menos um dia do mês e com partido ou UF históricos unívocos. O próprio senador
+   é excluído da média. Meses sem lançamento não viram despesa zero; lançamento de valor
+   zero participa normalmente. A média não representa todos os ocupantes das 81 cadeiras.
+3. Partido é determinado pelos intervalos de filiação; UF pelos mandatos. A fonte é
+   [mandatos do Senado](https://legis.senado.leg.br/dadosabertos/senador/22/mandatos.json),
+   que inclui intervalos de exercício e partidos de cada mandato. Os limites publicados
+   são inclusivos. Exercício sem fim publicado é limitado ao fim do mandato.
+4. A classificação precisa ser única em **todos os dias em exercício do mês**. Troca de
+   partido no mês recebe `MULTIPLOS` e não participa da comparação partidária daquele mês;
+   ainda pode participar da comparação por UF. Lacunas recebem `SEM_COBERTURA`. Não se
+   escolhe arbitrariamente o partido do último dia nem se rateiam despesas entre partidos.
+5. A comparação usa o total mensal observado, sem projetar ou dividir por dias em exercício.
+   `dias_exercicio` fica disponível para interpretar meses parciais. A referência mede
+   diferença de gasto, não eficiência, irregularidade, fraude ou atipicidade por LLM.
+6. Grupo sem outros senadores recebe `SEM_PARES`: média, diferença e percentual são nulos.
+   Se a média dos pares for zero, a diferença em reais continua disponível e o percentual
+   é nulo. Nulo nunca é apresentado como desvio zero.
+7. Competências sem contexto recebem `NAO_COLETADO`; sem dias de exercício confirmado,
+   `SEM_EXERCICIO`. Seus valores permanecem nas fatos e na tabela de comparação, com
+   estados explícitos e métricas nulas. Os pares de partido e UF são resolvidos separadamente.
+
+O cadastro atual de senador serve para nome e identificação. Não é fonte de partido/UF
+para esses cálculos. Os estados históricos mensais também não atribuem partido a cada
+lançamento fiscal individual: a classificação corresponde à competência CEAPS.
+
+### Modelos de consumo
+
+| Modelo em `analytics_marts` | Granularidade e uso |
+|---|---|
+| `dim_contexto_parlamentar_mensal` | Senador × ano × mês, com dias de exercício, classificação, URL, SHA-256 e data de coleta |
+| `fct_despesas_mensais` | Senador × competência com lançamentos, com total e contexto preservando todos os valores |
+| `gestao_comparacao_despesas_mensais` | Mesmo grão, com média dos pares, quantidade de pares, diferença em reais, percentual e estado de comparação |
+| `agg_despesas_mensais_fornecedor_categoria` | Senador × competência × fornecedor × categoria, para detalhar a composição sem duplicar despesas |
+
+`diferenca_media_partido = valor_total - media_pares_partido` e
+`desvio_percentual_partido = 100 * diferenca_media_partido / media_pares_partido`;
+as mesmas fórmulas valem para UF. `acima_media_*` é um indicador aritmético, não uma
+classificação de anomalia. Não somar os valores mensais após juntá-los ao detalhamento
+por categoria/fornecedor, pois o total mensal se repetiria em cada linha detalhada.
+
+O arquivo `scripts/sql/analytics/001_pergunta_central.sql` entrega as consultas prontas
+para comparar senadores em exercício no recorte de 2024, detalhar categorias/fornecedores
+e auditar os estados do contexto. O painel deve apresentar os estados e denominadores
+junto às métricas, inclusive grupos sem pares e mudanças de partido.
+
+### Reproduzir e atualizar o contexto
+
+O seed incluído cobre os 88 senadores com despesas na carga real de 2024 e contém
+1.056 competências. `make models` carrega esse recorte pelo dbt sem novas chamadas HTTP.
+Sua geração é automatizada e reproduzível:
+
+```bash
+# Atualiza apenas o ano solicitado a partir dos IDs de despesas do PostgreSQL local.
+make models-context CONTEXT_YEAR=2024
+make models
+make models-docs
+
+# Reprocessa exatamente as respostas locais sem HTTP, quando disponíveis.
+python3 scripts/modeling/atualizar_contexto.py --ano 2024 --usar-cache
+```
+
+O script usa somente a biblioteca padrão Python, consulta os IDs via Compose, coleta os
+mandatos em até quatro conexões e preserva as respostas em
+`resultados/contexto-parlamentar/<ano>/<senador>.json` (ignorado pelo Git). A URL e o hash
+da resposta ficam em cada linha do seed. Identidade divergente ou intervalo inválido
+interrompem a atualização; o arquivo anterior só é substituído após processar todos os
+senadores com sucesso. Anos já versionados diferentes do solicitado são preservados.
+
+A tabela versionada é um **recorte conhecido da fonte**, não uma garantia de que o
+Senado nunca fará correções. Ao mudar o ano ou adicionar senadores, atualizar o contexto
+antes de publicar os marts e revisar o diff do seed. Não se reaproveita 2024 para inferir
+outros anos. O comando é disponibilizado para a frente de orquestração, sem implementar
+agendamento, retry do pipeline ou SLA nesta frente.
+
+As perguntas 4 e 10 podem explorar as competências
+com contexto unívoco, respeitando a população com lançamentos. As perguntas 2 e 3 de
+classificação por LLM e a pergunta 8 de vagas em comissões continuam fora desta implementação.
+
+### Evidência da comparação na base real
+
+A publicação preservou os 21.430 lançamentos e R$ 32.290.271,35 em 974 competências
+com despesas. Destas, 938 tiveram comparação partidária válida; 5 tiveram múltiplos
+partidos nos dias em exercício, 27 não tiveram outros pares do partido e 4 não tiveram
+exercício no mês confirmado. Para UF, 970 foram comparáveis e 4 ficaram sem exercício.
+As quatro competências fora de exercício permanecem auditáveis e não entram na consulta
+principal de senadores em exercício; não se apagam despesas pagas fora desse intervalo.
+
+As médias foram verificadas por uma consulta independente no OLTP, com autojunção entre
+pares e exclusão explícita do próprio senador, além da reconciliação integral dos valores.
+A suíte dbt passou com 60 verificações na base real e no banco isolado. Sete cenários Python
+verificam intervalos, troca de partido, lacuna de filiação, duplicação de exercícios,
+identidade divergente e gravação atômica/legível do seed. O catálogo foi atualizado.
+
+## Decisão e acompanhamento da E3
+
+A escolha de modelagem, ferramenta, granularidades e histórico está formalizada no
+[ADR 0004](./adr/0004-modelagem-dimensional-com-dbt.md). O
+[diário inicial da E3](/squad/processos/diario-de-bordo-entrega-3) registra o trabalho
+de Ana e Danilo e mantém espaços para as evidências das demais frentes.

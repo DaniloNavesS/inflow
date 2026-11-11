@@ -1,0 +1,20 @@
+-- Cenário: Q1_categoria_com_indice_transitorio (2026-11-09T02:30:57Z, 7 execuções)
+-- Tempos (ms): 0.108 0.110 0.117 0.194 0.221 0.257 0.276 
+-- Preparo: BEGIN; CREATE INDEX ON analytics_marts.agg_despesas_mensais (senador_id, ano, mes, categoria_id, valor_total, quantidade_despesas); 
+-- SELECT mes, categoria_id, sum(valor_total) AS valor_total, sum(quantidade_despesas) AS quantidade
+-- FROM analytics_marts.agg_despesas_mensais WHERE senador_id = 581 AND ano = 2025
+-- GROUP BY mes, categoria_id ORDER BY mes, categoria_id;
+
+                                                                                             QUERY PLAN                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=0.41..6.54 rows=40 width=99) (actual time=0.033..0.072 rows=54 loops=1)
+   Group Key: mes, categoria_id
+   Buffers: shared hit=4
+   ->  Index Only Scan using agg_despesas_mensais_senador_id_ano_mes_categoria_id_valor__idx on agg_despesas_mensais  (cost=0.41..5.43 rows=51 width=49) (actual time=0.025..0.030 rows=54 loops=1)
+         Index Cond: ((senador_id = 581) AND (ano = 2025))
+         Heap Fetches: 0
+         Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=2
+ Planning Time: 0.106 ms
+ Execution Time: 0.110 ms

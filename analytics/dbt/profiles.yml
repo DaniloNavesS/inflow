@@ -1,0 +1,12 @@
+mandato_aberto:
+  target: local
+  outputs:
+    local:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'postgres') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('DB_NAME', 'inflow_db') }}"
+      user: "{{ env_var('DB_USER', 'inflow_user') }}"
+      password: "{{ env_var('DB_PASSWORD') }}"
+      schema: analytics
+      threads: 2
