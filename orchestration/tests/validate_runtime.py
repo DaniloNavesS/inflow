@@ -39,7 +39,14 @@ db = psycopg2.connect(host=os.environ['DB_HOST'], dbname=os.environ['DB_NAME'],
 with db.cursor() as c:
     c.execute('SELECT count(*), count(DISTINCT id), coalesce(sum(valor),0) FROM oltp.despesas')
     rows, ids, total = c.fetchone()
-report = {'postgres': {'rows': rows, 'unique_ids': ids, 'sum': str(total)}}
+models = None
+with db.cursor() as c:
+    c.execute("SELECT to_regclass('analytics_marts.fct_despesas') IS NOT NULL")
+    if c.fetchone()[0]:
+        c.execute('SELECT count(*), coalesce(sum(valor),0) FROM analytics_marts.fct_despesas')
+        model_rows, model_total = c.fetchone()
+        models = {'rows': model_rows, 'sum': str(model_total)}
+report = {'postgres': {'rows': rows, 'unique_ids': ids, 'sum': str(total)}, 'fct_despesas': models}
 if DeltaTable.is_deltatable('/lake/delta/despesas'):
     table = DeltaTable('/lake/delta/despesas').to_pyarrow_table()
     report['delta'] = {'rows': table.num_rows, 'unique_ids': len(pc.unique(table['id'])),
@@ -115,11 +122,13 @@ def validate(scenario, start_year, end_year, expect_unchanged=False):
         lake = tasks["materializar_lake"]
         if scenario == "exhausted":
             assert lake["state"] == "failed" and lake["try_number"] == 3, lake
-            assert tasks["verificar_freshness"]["state"] == "upstream_failed", tasks
+            for task_id in ("transformar_modelos", "verificar_freshness", "verificar_freshness_modelos"):
+                assert tasks[task_id]["state"] == "upstream_failed", tasks
             assert lake["run_state"] == "failed", lake
         else:
             assert lake["run_state"] == "success", tasks
-            assert tasks["verificar_freshness"]["state"] == "success", tasks
+            for task_id in ("transformar_modelos", "verificar_freshness", "verificar_freshness_modelos"):
+                assert tasks[task_id]["state"] == "success", tasks
             if scenario == "retry":
                 assert observed_retry and lake["try_number"] == 2, lake
         report["validated"] = True
@@ -150,7 +159,9 @@ def validate_freshness():
     for args, expected, status in [
         (["--sla-hours", "26"], 0, "fresh"),
         (["--sla-hours", "0.001"], 1, "stale"),
-        (["--pipeline", "e3_pipeline_sem_execucoes"], 1, "missing"),
+        (["--pipeline", "dbt_models", "--sla-hours", "26"], 0, "fresh"),
+        (["--pipeline", "dbt_models", "--sla-hours", "0.001"], 1, "stale"),
+        (["--pipeline", "e3_pipeline_sem_execucoes", "--sla-hours", "26"], 1, "missing"),
     ]:
         result = command("exec", "-T", "airflow", "/opt/inflow/analytics-venv/bin/python",
                          "/opt/inflow/analytics/freshness.py", *args, check=False)
