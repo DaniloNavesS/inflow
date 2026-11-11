@@ -387,7 +387,7 @@ models:
           - intervalo_valores:
               arguments: {minimo: 0}
   - name: gestao_comissoes_senador
-    description: Contagem distinta de comissões com vigência conhecida na referência; vínculos sem início são reportados separadamente.
+    description: Contagem distinta de comissões e subcomissões com vigência conhecida na referência (frentes, grupos parlamentares e conselhos ficam de fora); vínculos sem início são reportados separadamente.
     tests:
       - esquema_esperado:
           arguments:

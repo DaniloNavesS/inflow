@@ -162,7 +162,10 @@ A pergunta 7 é atendida por `comissoes_com_vigencia_confirmada`: conta comissõ
 distintas com início conhecido menor ou igual à referência e fim nulo ou maior ou igual
 à referência. Os limites são inclusivos. Dois cargos na mesma comissão não duplicam
 a contagem. Fim nulo significa intervalo aberto conforme a origem, sem comprovar que
-o vínculo continua ativo se a coleta estiver defasada.
+o vínculo continua ativo se a coleta estiver defasada. A origem traz qualquer colegiado
+com vínculo do senador; só entram na contagem comissões e subcomissões, identificadas
+pelo nome (`Comissão...` ou `Subcomissão...`). Frentes e grupos parlamentares,
+conselhos de comendas, prêmios e diplomas ficam de fora.
 
 `vinculos_sem_inicio_conhecido` conta registros sem início cujo fim não exclui a referência.
 Eles não entram na contagem confirmada, pois a data de ingresso é desconhecida. Zero
