@@ -40,7 +40,7 @@ registro nesta página, não ausência de trabalho do integrante.
 | Danilo Naves — @DaniloNavesS | Trabalho conjunto de Ana e Danilo: dbt, camadas, fatos, dimensões, agregações, histórico de fornecedores, modelos institucionais, contexto parlamentar histórico, comparação da pergunta central, testes das transformações, validação e documentação. |
 | Yzabella Miranda — @redjsun | Orquestração: período de ingestão por intervalo de anos, DAG `inflow_backfill` com validação prévia, pool `inflow_exclusivo`, testes de contrato do backfill e de idempotência, `freshness.py --pipeline`. |
 | Manuella Valadares — @manuvaladares | Orquestração: freshness operacional com SLA, Airflow no Compose com os DAGs diário e de freshness, callbacks de retry e falha, SLA revisado para 26 h, validação real em ambiente isolado e integração do dbt ao DAG com freshness própria dos modelos. |
-| Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
+| Victor Câmara — @victorcamaraa | Qualidade: suíte de testes no dbt para esquema, volume, unicidade, integridade, histórico e distribuição, com 149 testes novos sobre fontes e marts; testes genéricos reutilizáveis; limites por perfil (`producao` e `fixture`); testes na origem que impedem a publicação de carga vazia ou com esquema alterado; prova de detecção com 12 defeitos injetados; relatório por dimensão (`make quality`) e página de qualidade. |
 | Vilmar Fagundes — @VilmarFagundes | Otimização: carga da série CEAPS 2020–2025 para medição; consulta por senador e ano otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais, com respostas conferidas; análise das consultas da pergunta central; teste de crescimento de volume; script de medição reproduzível, ADR 0005 e página de otimização. |
 | Yan Guimarães — @yanzin00 | Painel Streamlit conectado a `analytics_marts`: pergunta central com médias dos pares, perguntas 1, 4, 10, 11 e 13 (parcial), comissões, gabinete e presenças documentadas, com filtros, datas de coleta e de modelos e testes contra os marts. |
 
@@ -219,7 +219,13 @@ repetidas bateram entre si. Run IDs e detalhes estão no
 
 #### Qualidade — Victor
 
-— A preencher: PRs, commits e resultados da suíte de qualidade de dados.
+- [PR #37 — suíte de qualidade dos dados](https://github.com/DaniloNavesS/inflow/pull/37).
+- [Testes por dimensão, limites, relatório e prova de detecção](https://github.com/DaniloNavesS/inflow/commit/e046a65).
+- Cast em `competencias_sem_lacunas` após a integração com a otimização: [Yan](https://github.com/DaniloNavesS/inflow/commit/e5c632a) e [Manuella](https://github.com/DaniloNavesS/inflow/commit/c895685).
+- [Guia de qualidade dos dados](/docs/qualidade-dos-dados).
+- Testes genéricos em `analytics/dbt/tests/generic/`, singulares em `analytics/dbt/tests/qualidade/`,
+  defeitos injetados em `tests/modeling/quality_defects.sql` e relatório em
+  `scripts/quality/relatorio_qualidade.py`.
 
 #### Otimização — Vilmar
 
@@ -241,7 +247,7 @@ repetidas bateram entre si. Run IDs e detalhes estão no
 
 | Frente | Atividades | O que foi medido | Decisões e evidências |
 |---|---|---|---|
-| Qualidade — Victor | — A preencher | — A preencher | — A preencher |
+| Qualidade — Victor | Contratos de esquema em 9 fontes e 20 marts; volume mínimo, entre camadas e por mês; unicidade do grão natural; 15 regras de negócio por linha; testes do histórico (SCD2 de fornecedores e contexto mensal de partido/UF); faixas, proporções, concentração e meses sem lançamentos; relatório `make quality` | 189 testes dbt (antes 40): esquema 29, volume 16, unicidade 32, integridade 80, histórico 7, distribuição 25; 12 defeitos injetados, todos detectados com `FAIL`; com limites de produção, a fixture reprova só em volume e distribuição; 7 testes Python do relatório | Testes dentro do dbt, sem pacotes externos; tipo por família em vez do nome exato; erro para regras estruturais e aviso para sinais estatísticos; testes na origem como disjuntor; [guia de qualidade](/docs/qualidade-dos-dados) |
 | Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
 | Painel — Yan | Painel em abas (gastos, comissões e gabinete, presença) sobre os marts do dbt, com conexão somente leitura; perguntas 4 e 10 refeitas com o partido/UF da competência; correção do teste `competencias_sem_lacunas`, que impedia a publicação dos marts | `make test-painel`: consultas conferidas contra SQL direto nos marts, médias de 4 e 10 recalculadas a partir dos lançamentos e renderização de todas as abas | Streamlit versionado no Git em vez de BI externo; média de grupo por senador-mês; competências fora do cálculo exibidas, não descartadas; [guia do painel](/docs/painel) |
 
