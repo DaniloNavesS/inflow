@@ -24,14 +24,6 @@ orienta a construção de modelos dimensionais, transformações declarativas, t
 orquestração e consumo que responda à pergunta da E1. A frente de modelagem entrega os
 dados e suas regras; isso não significa que todas as frentes da E3 estejam concluídas.
 
-:::note[Registro em construção]
-
-As contribuições de orquestração, qualidade e painel serão preenchidas pelos
-responsáveis com suas atividades e evidências. Um campo “a preencher” indica ausência do
-registro nesta página, não ausência de trabalho do integrante.
-
-:::
-
 ## Contribuições dos integrantes
 
 | Integrante | Contribuições registradas na E3 |
@@ -243,17 +235,17 @@ repetidas bateram entre si. Run IDs e detalhes estão no
 - [Guia do painel: como executar, perguntas, modelos, limitações e telas](/docs/painel).
 - Código em `painel/`, testes em `tests/painel/` e comandos `make painel` e `make test-painel`.
 
-## Demais frentes — a preencher
+## Demais frentes
 
 | Frente | Atividades | O que foi medido | Decisões e evidências |
 |---|---|---|---|
 | Qualidade — Victor | Contratos de esquema em 9 fontes e 20 marts; volume mínimo, entre camadas e por mês; unicidade do grão natural; 15 regras de negócio por linha; testes do histórico (SCD2 de fornecedores e contexto mensal de partido/UF); faixas, proporções, concentração e meses sem lançamentos; relatório `make quality` | 189 testes dbt (antes 40): esquema 29, volume 16, unicidade 32, integridade 80, histórico 7, distribuição 25; 12 defeitos injetados, todos detectados com `FAIL`; com limites de produção, a fixture reprova só em volume e distribuição; 7 testes Python do relatório | Testes dentro do dbt, sem pacotes externos; tipo por família em vez do nome exato; erro para regras estruturais e aviso para sinais estatísticos; testes na origem como disjuntor; [guia de qualidade](/docs/qualidade-dos-dados) |
 | Otimização — Vilmar | Carga CEAPS 2020–2025 (111.837 despesas); leitura do plano da consulta por senador e ano; índice `(senador_id, ano, mes, categoria_id, valor)` e `post_hook` com `ANALYZE` em `fct_despesas`; comparação das quatro granularidades e das consultas da pergunta central | Q1 de 3.029 para 10 buffers (Seq Scan para Index Only Scan, sem Sort); consultas amplas com 31 vezes menos páginas na fato mensal; com índice, custo constante de 1 a 6 anos; estimativa logo após o build de 3 para 699 linhas | Fato no lançamento, agregados mensais derivados para consultas amplas e índice só na fato; [ADR 0005](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao) |
-| Painel — Yan | Painel em abas (gastos, comissões e gabinete, presença) sobre os marts do dbt, com conexão somente leitura; perguntas 4 e 10 refeitas com o partido/UF da competência; correção do teste `competencias_sem_lacunas`, que impedia a publicação dos marts | `make test-painel`: consultas conferidas contra SQL direto nos marts, médias de 4 e 10 recalculadas a partir dos lançamentos e renderização de todas as abas | Streamlit versionado no Git em vez de BI externo; média de grupo por senador-mês; competências fora do cálculo exibidas, não descartadas; [guia do painel](/docs/painel) |
+| Painel — Yan | Painel em abas (gastos, comissões e gabinete, presença) sobre os marts do dbt, com conexão somente leitura; perguntas 4 e 10 refeitas com o partido/UF da competência; correção do teste `competencias_sem_lacunas`, que impedia a publicação dos marts; pergunta 7 restrita a comissões e subcomissões, pois a origem traz também frentes, grupos parlamentares e conselhos | `make test-painel`: consultas conferidas contra SQL direto nos marts, médias de 4 e 10 recalculadas a partir dos lançamentos e renderização de todas as abas; pergunta 7: máximo por senador de 53 para 15 e mediana de 16,5 para 6 (`make models` e consulta ao mart), com fixture de `make test-models` que falha se uma frente parlamentar entrar na contagem | Streamlit versionado no Git em vez de BI externo; média de grupo por senador-mês; competências fora do cálculo exibidas, não descartadas; recorte da pergunta 7 pelo nome do colegiado, combinado com o grupo no PR #39; [guia do painel](/docs/painel) |
 
 ## Continuidade
 
 Os modelos e suas regras estão disponíveis para integração. Os próximos registros devem
 reunir as execuções e evidências das demais frentes, além da validação conjunta da E3.
 A orquestração está registrada acima, com retry, backfill, agendamento, freshness e SLA
-demonstrados. Qualidade e painel ainda precisam dos registros dos respectivos responsáveis.
+demonstrados. Qualidade, otimização e painel também estão registrados acima.
