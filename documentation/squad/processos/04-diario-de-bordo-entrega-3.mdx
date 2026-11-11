@@ -8,14 +8,16 @@ sidebar_position: 4
 
 **Grupo:** 11 — Banco de Dados 2 / UnB
 
-**Atualizado em:** 10/11/2026
+**Atualizado em:** 11/11/2026
 
 ## Escopo
 
-Registro inicial da **E3 — Camada analítica transformada, testada e orquestrada**, em
-continuidade à [Entrega 2](./03-diario-de-bordo-semanas-7-a-10.mdx). Esta primeira versão
-registra o trabalho conjunto de **Ana Luiza e Danilo Naves** na frente de modelagem e
+Registro da **E3 — Camada analítica transformada, testada e orquestrada**, em
+continuidade à [Entrega 2](./03-diario-de-bordo-semanas-7-a-10.mdx). A primeira versão
+registrou o trabalho conjunto de **Ana Luiza e Danilo Naves** na frente de modelagem e
 transformações, integrado à `develop` pelo [PR #35](https://github.com/DaniloNavesS/inflow/pull/35).
+Esta atualização acrescenta a frente de **otimização de consultas**, conduzida por
+**Vilmar Fagundes** sobre os modelos publicados por essa frente.
 
 O [enunciado da E3](https://github.com/UnB-BD2/PlanoEnsino/blob/main/_entregas/e3.md)
 orienta a construção de modelos dimensionais, transformações declarativas, testes,
@@ -24,7 +26,7 @@ dados e suas regras; isso não significa que todas as frentes da E3 estejam conc
 
 :::note[Registro em construção]
 
-As contribuições de qualidade e painel serão preenchidas pelos
+As contribuições de orquestração, qualidade e painel serão preenchidas pelos
 responsáveis com suas atividades e evidências. Um campo “a preencher” indica ausência do
 registro nesta página, não ausência de trabalho do integrante.
 
@@ -39,7 +41,7 @@ registro nesta página, não ausência de trabalho do integrante.
 | Yzabella Miranda — @redjsun | Orquestração: período de ingestão por intervalo de anos, DAG `inflow_backfill` com validação prévia, pool `inflow_exclusivo`, testes de contrato do backfill e de idempotência, `freshness.py --pipeline`. |
 | Manuella Valadares — @manuvaladares | Orquestração: freshness operacional com SLA, Airflow no Compose com os DAGs diário e de freshness, callbacks de retry e falha, SLA revisado para 26 h, validação real em ambiente isolado e integração do dbt ao DAG com freshness própria dos modelos. |
 | Victor Câmara — @victorcamaraa | — A preencher: atividades e evidências da frente de qualidade. |
-| Vilmar Fagundes — @VilmarFagundes | Otimização: consulta do painel por senador otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais; script de medição reproduzível e ADR 0005. |
+| Vilmar Fagundes — @VilmarFagundes | Otimização: carga da série CEAPS 2020–2025 para medição; consulta por senador e ano otimizada a partir do plano de execução, com índice de cobertura e `ANALYZE` declarados no dbt; comparação de custo das granularidades detalhada e mensais, com respostas conferidas; análise das consultas da pergunta central; teste de crescimento de volume; script de medição reproduzível, ADR 0005 e página de otimização. |
 | Yan Guimarães — @yanzin00 | — A preencher: atividades e evidências da frente do painel. |
 
 ## Semana de 2 a 8/11 — modelagem e transformações
@@ -223,6 +225,10 @@ repetidas bateram entre si. Run IDs e detalhes estão no
 
 - [Otimização de consultas: planos antes/depois e comparação de granularidades](/docs/otimizacao-consultas).
 - [ADR 0005 — granularidade da fato e índice por plano de execução](/docs/adr/granularidade-da-fato-e-indice-por-plano-de-execucao).
+- [Plano original, antes do índice](/data/adr-0005/planos/Q1_original_antes_do_indice.txt) e
+  [plano depois do índice](/data/adr-0005/planos/Q1_depois_detalhada_com_indice.txt).
+- [Resumo da medição completa](/data/adr-0005/resumo.txt), gerado pelo script.
+- Índice e `post_hook` em `analytics/dbt/models/marts/fct_despesas.sql`.
 - Script de medição `scripts/adr/0005_planos_execucao.sh` e planos versionados em
   `documentation/static/data/adr-0005/`.
 
