@@ -13,4 +13,10 @@ select s.senador_id, r.data_referencia,
        ) as vinculos_sem_inicio_conhecido
 from {{ ref('dim_senador') }} s cross join referencia r
 left join {{ ref('fct_participacoes_comissao') }} p on p.senador_id = s.senador_id
+    -- a origem traz qualquer colegiado (frentes, grupos parlamentares, conselhos de comendas...);
+    -- a pergunta 7 conta só comissões e subcomissões, identificadas pelo nome
+    and p.comissao_id in (
+        select comissao_id from {{ ref('dim_comissao') }}
+        where nome ilike 'comiss%' or nome ilike 'subcomiss%'
+    )
 group by s.senador_id, r.data_referencia
