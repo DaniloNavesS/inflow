@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from airflow.dag_processing.dagbag import DagBag
 from airflow.sdk.definitions.param import NOTSET
 
+FRESHNESS_TASKS = {"verificar_freshness", "verificar_freshness_modelos"}
+
 
 class DagTests(unittest.TestCase):
     @classmethod
@@ -20,9 +22,11 @@ class DagTests(unittest.TestCase):
     def test_dependencies_and_failure_blocking(self):
         dag = self.bag.dags["inflow_pipeline"]
         self.assertEqual(dag.get_task("ingerir_origem").downstream_task_ids, {"materializar_lake"})
-        self.assertEqual(dag.get_task("materializar_lake").downstream_task_ids, {"verificar_freshness"})
+        self.assertEqual(dag.get_task("materializar_lake").downstream_task_ids, {"transformar_modelos"})
+        self.assertEqual(dag.get_task("transformar_modelos").downstream_task_ids, FRESHNESS_TASKS)
         self.assertEqual(dag.get_task("materializar_lake").trigger_rule, "none_failed_min_one_success")
-        self.assertEqual(dag.get_task("verificar_freshness").trigger_rule, "all_success")
+        for name in ("transformar_modelos", *FRESHNESS_TASKS):
+            self.assertEqual(dag.get_task(name).trigger_rule, "all_success")
 
     def test_schedule_and_no_automatic_backfill(self):
         dag = self.bag.dags["inflow_pipeline"]
@@ -32,7 +36,7 @@ class DagTests(unittest.TestCase):
         self.assertEqual(dag.max_active_runs, 1)
 
     def test_retry_and_timeout_on_external_work(self):
-        for name in ("ingerir_origem", "materializar_lake", "verificar_freshness"):
+        for name in ("ingerir_origem", "materializar_lake", "transformar_modelos", *FRESHNESS_TASKS):
             task = self.bag.dags["inflow_pipeline"].get_task(name)
             self.assertEqual(task.retries, 2)
             self.assertEqual(task.retry_delay.total_seconds(), 60)
@@ -41,7 +45,18 @@ class DagTests(unittest.TestCase):
     def test_freshness_has_independent_schedule(self):
         dag = self.bag.dags["inflow_freshness"]
         self.assertEqual(dag.schedule, "15 * * * *")
-        self.assertEqual(set(dag.task_ids), {"verificar_freshness"})
+        self.assertEqual(set(dag.task_ids), FRESHNESS_TASKS)
+
+    def test_models_freshness_is_measured_apart_from_the_lake(self):
+        for dag_id in ("inflow_pipeline", "inflow_backfill", "inflow_freshness"):
+            dag = self.bag.dags[dag_id]
+            self.assertNotIn("--pipeline", dag.get_task("verificar_freshness").bash_command)
+            self.assertTrue(dag.get_task("verificar_freshness_modelos").bash_command
+                            .endswith("freshness.py --pipeline dbt_models"))
+
+    def test_models_task_runs_dbt_build_through_the_monitored_wrapper(self):
+        task = self.bag.dags["inflow_pipeline"].get_task("transformar_modelos")
+        self.assertIn("/opt/inflow/orchestration/modelos.py build", task.bash_command)
 
     def test_backfill_is_manual_with_required_interval(self):
         dag = self.bag.dags["inflow_backfill"]
@@ -55,8 +70,9 @@ class DagTests(unittest.TestCase):
         dag = self.bag.dags["inflow_backfill"]
         self.assertEqual(dag.get_task("validar_periodo").downstream_task_ids, {"ingerir_origem"})
         self.assertEqual(dag.get_task("ingerir_origem").downstream_task_ids, {"materializar_lake"})
-        self.assertEqual(dag.get_task("materializar_lake").downstream_task_ids, {"verificar_freshness"})
-        for name in ("ingerir_origem", "materializar_lake", "verificar_freshness"):
+        self.assertEqual(dag.get_task("materializar_lake").downstream_task_ids, {"transformar_modelos"})
+        self.assertEqual(dag.get_task("transformar_modelos").downstream_task_ids, FRESHNESS_TASKS)
+        for name in ("ingerir_origem", "materializar_lake", "transformar_modelos", *FRESHNESS_TASKS):
             self.assertEqual(dag.get_task(name).trigger_rule, "all_success")
 
     def test_backfill_passes_interval_to_ingestion_without_losing_environment(self):
@@ -75,8 +91,8 @@ class DagTests(unittest.TestCase):
 
     def test_loads_share_one_slot_pool(self):
         for dag_id, names in (
-            ("inflow_pipeline", ("ingerir_origem", "materializar_lake")),
-            ("inflow_backfill", ("ingerir_origem", "materializar_lake")),
+            ("inflow_pipeline", ("ingerir_origem", "materializar_lake", "transformar_modelos")),
+            ("inflow_backfill", ("ingerir_origem", "materializar_lake", "transformar_modelos")),
         ):
             for name in names:
                 self.assertEqual(self.bag.dags[dag_id].get_task(name).pool, "inflow_exclusivo")

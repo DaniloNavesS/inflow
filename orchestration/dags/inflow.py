@@ -1,4 +1,4 @@
-"""Base E3: origem -> lake -> freshness."""
+"""E3: origem -> lake -> modelos dbt -> freshness."""
 from datetime import timedelta
 import json
 import logging
@@ -70,10 +70,28 @@ def lake_task(trigger_rule="none_failed_min_one_success"):
     )
 
 
-def freshness_task():
+# Transformações dbt: leem o OLTP e publicam o schema analytics. Mesmo pool das
+# cargas para não reconstruir os modelos durante uma reingestão concorrente.
+def models_task():
     return BashOperator(
-        task_id="verificar_freshness",
-        bash_command="exec /opt/inflow/analytics-venv/bin/python freshness.py",
+        task_id="transformar_modelos",
+        bash_command="exec /opt/inflow/analytics-venv/bin/python /opt/inflow/orchestration/modelos.py build",
+        cwd="/opt/inflow/dbt",
+        pool=EXCLUSIVE_POOL,
+        do_xcom_push=False,
+    )
+
+
+MODELS_PIPELINE = "dbt_models"
+
+
+def freshness_task(task_id="verificar_freshness", pipeline=None):
+    command = "exec /opt/inflow/analytics-venv/bin/python freshness.py"
+    if pipeline:
+        command += f" --pipeline {pipeline}"
+    return BashOperator(
+        task_id=task_id,
+        bash_command=command,
         cwd="/opt/inflow/analytics",
         execution_timeout=timedelta(minutes=2),
         do_xcom_push=False,
@@ -82,7 +100,7 @@ def freshness_task():
 
 with DAG(
     dag_id="inflow_pipeline",
-    description="Atualiza origem e lake; integração dbt pendente dos modelos.",
+    description="Atualiza origem, lake e modelos dbt; verifica o SLA dos dois.",
     start_date=pendulum.datetime(2026, 11, 1, tz="America/Sao_Paulo"),
     schedule=os.getenv("INFLOW_PIPELINE_SCHEDULE", "0 6 * * *"),
     catchup=False,
@@ -103,9 +121,12 @@ with DAG(
     escolha = escolher_origem()
     ingestao = ingestion_task()
     lake = lake_task()
-    freshness = freshness_task()
+    modelos = models_task()
     escolha >> [ingestao, lake]
-    ingestao >> lake >> freshness
+    ingestao >> lake >> modelos >> [
+        freshness_task(),
+        freshness_task("verificar_freshness_modelos", MODELS_PIPELINE),
+    ]
 
 
 def validar_periodo(ano_inicio, ano_fim):
@@ -145,13 +166,16 @@ with DAG(
         "INGESTION_START_YEAR": "{{ params.ano_inicio }}",
         "INGESTION_END_YEAR": "{{ params.ano_fim }}",
     })
-    validar() >> reingestao >> lake_task(trigger_rule="all_success") >> freshness_task()
+    validar() >> reingestao >> lake_task(trigger_rule="all_success") >> models_task() >> [
+        freshness_task(),
+        freshness_task("verificar_freshness_modelos", MODELS_PIPELINE),
+    ]
 
 
 # Independente: detecta atraso mesmo quando o pipeline principal não roda.
 with DAG(
     dag_id="inflow_freshness",
-    description="Verifica o SLA operacional do lake, sem materializar dados.",
+    description="Verifica o SLA operacional do lake e dos modelos, sem materializar dados.",
     start_date=pendulum.datetime(2026, 11, 1, tz="America/Sao_Paulo"),
     schedule="15 * * * *",
     catchup=False,
@@ -161,3 +185,4 @@ with DAG(
     tags=["inflow", "monitoramento"],
 ) as freshness_monitor:
     freshness_task()
+    freshness_task("verificar_freshness_modelos", MODELS_PIPELINE)
