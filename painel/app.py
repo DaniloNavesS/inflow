@@ -204,9 +204,10 @@ def secao_pergunta_7(filtros):
         return
     referencias = ", ".join(sorted({pd.Timestamp(d).strftime("%d/%m/%Y") for d in df["data_referencia"]}))
     st.caption(
-        f"Comissões distintas com vínculo vigente em {referencias} (data de referência da última publicação "
-        "dos modelos). Vínculos sem data de início não entram na contagem e aparecem à parte: zero comissões "
-        "confirmadas não prova ausência de vínculo. Partido e UF atuais; o filtro de ano e o de categoria "
+        f"Comissões e subcomissões distintas com vínculo vigente em {referencias} (data de referência da última "
+        "publicação dos modelos); frentes, grupos parlamentares e conselhos não entram. Vínculos sem data de "
+        "início não entram na contagem e aparecem à parte: zero comissões confirmadas não prova ausência de "
+        "vínculo. Partido e UF atuais; o filtro de ano e o de categoria "
         "não se aplicam."
     )
     barras_horizontais(

@@ -94,7 +94,7 @@ até que `make models-context CONTEXT_YEAR=<ano>` seja executado.
 |---|---|
 | 2 e 3: despesas e categorias atípicas avaliadas por LLM | Não coberta: a classificação não é produzida pelos modelos |
 | 5 e 6: taxa de comparecimento | Parcial: o painel mostra presenças documentadas, sem taxa, pois só há a amostra de sessões coletadas e nenhum denominador de sessões deliberativas obrigatórias |
-| 7: comissões | A contagem vale na data de referência do último `dbt build`; vínculos sem data de início ficam à parte e fim nulo é tratado como vínculo aberto, conforme a origem |
+| 7: comissões | Conta só comissões e subcomissões, identificadas pelo nome do colegiado: a origem traz também frentes, grupos parlamentares e conselhos, que ficam de fora. A contagem vale na data de referência do último `dbt build`; vínculos sem data de início ficam à parte e fim nulo é tratado como vínculo aberto, conforme a origem |
 | 8: vagas em comissões por partido | Não coberta: falta regra de vagas e atribuição temporal dos vínculos |
 | 9: votos nominais abertos | Não coberta: o indicador documental de voto não tem a granularidade de voto nominal |
 | 13: donos de fornecedores | Parcial: o painel mostra os fornecedores; o quadro societário do CNPJ ainda não foi transformado em marts |
