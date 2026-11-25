@@ -96,10 +96,10 @@ lugar e com mais de um significado. Cada linha abaixo foi conferida no código.
 | Métrica | Definição | Onde é calculada |
 |---|---|---|
 | Média mensal do senador (pergunta 1) | média dos totais mensais nos meses com despesas: `sum(total) / count(*)` por senador e ano | dbt `gestao_media_mensal.sql`; lake `analytics/src/consumption.py` (soma e meses no SQL, razão em Python); o painel só lê o mart |
-| Média por grupo, senador-mês (perguntas 4 e 10) | `sum(valor_total) / count(*)` sobre competências elegíveis, **incluindo** o próprio senador | só no painel, `media_mensal_por_grupo` em `painel/consultas.py`; não existe mart |
+| Média por grupo, senador-mês (perguntas 4 e 10) | `sum(valor_total) / count(*)` sobre competências elegíveis, **incluindo** o próprio senador | só no painel, `media_senador_mes` em `painel/metricas.py`; não existe mart |
 | Média dos pares (pergunta central) | `(total do grupo - valor do senador) / (tamanho do grupo - 1)`, **excluindo** o próprio senador | dbt `int_comparacao_despesas_mensais.sql` |
 | Diferença, desvio percentual e acima da média | `valor - média dos pares`; `100 * diferença / média dos pares`; `valor > média dos pares` | dbt `gestao_comparacao_despesas_mensais.sql`; o painel soma as diferenças e conta os meses acima em `comparacao_resumo` |
-| Competência elegível ao grupo | em exercício no mês, status `UNICO` e partido/UF não nulo | dbt `int_comparacao_despesas_mensais.sql` (`apto_partido`, `apto_uf`); repetida no painel em `media_mensal_por_grupo` e, negada, em `competencias_fora_do_grupo` |
+| Competência elegível ao grupo | em exercício no mês, status `UNICO` e partido/UF não nulo | dbt `int_comparacao_despesas_mensais.sql` (`apto_partido`, `apto_uf`); repetida no painel em `competencia_elegivel` (`painel/metricas.py`), usada em `media_mensal_por_grupo` e, negada, em `competencias_fora_do_grupo` |
 
 Pontos que a camada semântica precisa resolver:
 
@@ -134,6 +134,7 @@ verificam:
 - médias das perguntas 4 e 10 recalculadas a partir de `fct_despesas` e
   `dim_contexto_parlamentar_mensal`, sem passar pelo modelo mensal;
 - cobertura total do gasto pelos grupos mais as competências fora do cálculo;
+- regra de elegibilidade do painel idêntica à do dbt (`apto_partido`, `apto_uf`);
 - reconciliação dos totais e das diferenças da pergunta central com o mart;
 - ausência de desvio em meses sem comparação, filtros de senador e de categoria;
 - fornecedores, comissões, gabinete e presença contra SQL direto nos marts;
