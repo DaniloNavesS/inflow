@@ -88,6 +88,27 @@ verificado por `make test-painel`.
 O contexto histórico versionado cobre apenas 2024. Outros anos carregados aparecem como `NAO_COLETADO`
 até que `make models-context CONTEXT_YEAR=<ano>` seja executado.
 
+## Onde cada métrica é calculada
+
+Levantamento feito para a E4 (camada semântica): hoje a definição de "média" existe em mais de um
+lugar e com mais de um significado. Cada linha abaixo foi conferida no código.
+
+| Métrica | Definição | Onde é calculada |
+|---|---|---|
+| Média mensal do senador (pergunta 1) | média dos totais mensais nos meses com despesas: `sum(total) / count(*)` por senador e ano | dbt `gestao_media_mensal.sql`; lake `analytics/src/consumption.py` (soma e meses no SQL, razão em Python); o painel só lê o mart |
+| Média por grupo, senador-mês (perguntas 4 e 10) | `sum(valor_total) / count(*)` sobre competências elegíveis, **incluindo** o próprio senador | só no painel, `media_mensal_por_grupo` em `painel/consultas.py`; não existe mart |
+| Média dos pares (pergunta central) | `(total do grupo - valor do senador) / (tamanho do grupo - 1)`, **excluindo** o próprio senador | dbt `int_comparacao_despesas_mensais.sql` |
+| Diferença, desvio percentual e acima da média | `valor - média dos pares`; `100 * diferença / média dos pares`; `valor > média dos pares` | dbt `gestao_comparacao_despesas_mensais.sql`; o painel soma as diferenças e conta os meses acima em `comparacao_resumo` |
+| Competência elegível ao grupo | em exercício no mês, status `UNICO` e partido/UF não nulo | dbt `int_comparacao_despesas_mensais.sql` (`apto_partido`, `apto_uf`); repetida no painel em `media_mensal_por_grupo` e, negada, em `competencias_fora_do_grupo` |
+
+Pontos que a camada semântica precisa resolver:
+
+- "Média por grupo" (perguntas 4 e 10) e "média dos pares" (pergunta central) respondem a perguntas
+  diferentes: a primeira inclui o senador, a segunda não. Os nomes das métricas precisam deixar isso explícito.
+- A regra de elegibilidade tem duas implementações independentes (dbt e painel).
+- A razão "total / meses com despesas" tem duas implementações (dbt e lake), e o lake a calcula em
+  Python para evitar diferença de precisão entre motores.
+
 ## Limitações
 
 | Pergunta | Situação no painel |
