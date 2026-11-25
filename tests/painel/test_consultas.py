@@ -13,6 +13,7 @@ sys.path.insert(0, "/app")
 sys.path.insert(0, str(Path(__file__).parents[2] / "painel"))
 
 import consultas  # noqa: E402
+import metricas  # noqa: E402
 
 TOLERANCIA = 0.005  # meio centavo: as consultas convertem NUMERIC para float
 
@@ -157,3 +158,23 @@ def test_app_renderiza_todas_as_secoes_sem_erro(sql):
     assert not at.exception
     assert not at.error
     assert [t.label for t in at.tabs] == ["Gastos (CEAPS)", "Comissões e gabinete", "Presença"]
+
+
+def test_metricas_rejeitam_grupo_invalido_e_usam_o_alias():
+    with pytest.raises(ValueError):
+        metricas.competencia_elegivel("m", "partido_atual; DROP TABLE x")
+    assert metricas.media_senador_mes("m") == "sum(m.valor_total) / count(*)"
+    assert metricas.competencia_elegivel("m", "uf") == (
+        "m.em_exercicio_no_mes AND m.status_uf = 'UNICO' AND m.uf_competencia IS NOT NULL"
+    )
+
+
+@pytest.mark.parametrize("grupo,apto", [("partido", "apto_partido"), ("uf", "apto_uf")])
+def test_elegibilidade_do_painel_e_a_mesma_do_dbt(sql, grupo, apto):
+    """O painel reimplementa apto_partido/apto_uf do dbt; as duas contagens têm de coincidir."""
+    no_painel = escalar(sql, f"""
+        SELECT count(*) FROM analytics_marts.fct_despesas_mensais m
+        WHERE {metricas.competencia_elegivel('m', grupo)}""")
+    no_dbt = escalar(sql, f"""
+        SELECT count(*) FROM analytics_intermediate.int_comparacao_despesas_mensais WHERE {apto}""")
+    assert no_painel == no_dbt

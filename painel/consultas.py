@@ -5,11 +5,7 @@ from decimal import Decimal
 import pandas as pd
 import psycopg2
 
-# Nome de coluna não pode ser parâmetro SQL: lista fechada (coluna do grupo, coluna de status).
-GRUPOS_VALIDOS = {
-    "partido": ("partido_competencia", "status_partido"),
-    "uf": ("uf_competencia", "status_uf"),
-}
+from metricas import GRUPOS_VALIDOS, competencia_elegivel, media_senador_mes
 
 CHAVES_FILTRO = ("anos", "partidos", "ufs", "senadores", "categorias")
 
@@ -137,11 +133,9 @@ def media_mensal_por_grupo(grupo, filtros=None):
                count(DISTINCT m.senador_id) AS senadores,
                count(*) AS competencias,
                sum(m.valor_total) AS valor_total,
-               sum(m.valor_total) / count(*) AS media_mensal
+               {media_senador_mes('m')} AS media_mensal
         FROM analytics_marts.fct_despesas_mensais m
-        WHERE m.em_exercicio_no_mes
-          AND m.{status} = 'UNICO'
-          AND m.{coluna} IS NOT NULL
+        WHERE {competencia_elegivel('m', grupo)}
           AND {_filtros_competencia(f)}
         GROUP BY m.{coluna}, m.ano
         ORDER BY m.ano, media_mensal DESC
@@ -164,7 +158,7 @@ def competencias_fora_do_grupo(grupo, filtros=None):
                count(*) AS competencias,
                sum(m.valor_total) AS valor_total
         FROM analytics_marts.fct_despesas_mensais m
-        WHERE NOT (m.em_exercicio_no_mes AND m.{status} = 'UNICO' AND m.{coluna} IS NOT NULL)
+        WHERE NOT ({competencia_elegivel('m', grupo)})
           AND {_clausula('m.ano', 'anos', f['anos'], 'int')}
           AND {_clausula('m.senador_id', 'senadores', f['senadores'], 'int')}
         GROUP BY 1, 2

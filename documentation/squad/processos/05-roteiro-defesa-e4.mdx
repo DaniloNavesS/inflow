@@ -1,0 +1,47 @@
+---
+title: Roteiro da defesa — Entrega 4
+sidebar_label: Roteiro da defesa (E4)
+sidebar_position: 5
+---
+
+# Roteiro da defesa — Entrega 4
+
+Rascunho da defesa de 20 minutos para público técnico e de gestão. Os tempos são uma **proposta de
+divisão**, não medição; ensaiar e ajustar. Cada bloco aponta o material que já existe e o que ainda
+depende de outra frente. Responsável pelos slides: Yan.
+
+## Fio condutor
+
+Uma pergunta de gestão (quem gastou acima da média dos pares) vira um dado confiável, uma métrica
+com uma definição só, uma ação (fila de verificação) e regras claras de privacidade e acesso. A fila
+é um **indicador, não uma acusação**: o analista registra o resultado da verificação.
+
+## Blocos
+
+| # | Bloco | Tempo proposto | Material pronto | Depende de |
+|---|---|---|---|---|
+| 1 | Problema e pergunta central | 2 min | `escopo-e-perguntas.mdx`, aba Gastos do painel | — |
+| 2 | Do dado bruto ao painel (E1 a E3 em um slide) | 3 min | `arquitetura-pipeline.mdx`, telas em `static/img/painel/` | — |
+| 3 | Camada semântica: uma definição de média | 3 min | inventário em `painel.mdx` ("Onde cada métrica é calculada"), `painel/metricas.py` | Danilo (camada semântica) |
+| 4 | ETL reverso: da média à fila de verificação | 4 min | — | Manuella (envio) e Yzabella (destino) |
+| 5 | Catálogo e linhagem: uma coluna da API ao painel | 2 min | dbt gera a documentação; publicação pendente | Ana Luiza |
+| 6 | LGPD e acesso por papel | 3 min | — | Victor |
+| 7 | Decisão arquitetural (ADR 0006) e retrospectiva | 3 min | ADRs 0001 a 0005 | Vilmar (ADR 0006), Ana Luiza (retrospectiva) |
+
+Soma proposta: 20 min. Perguntas ficam fora desse tempo; reservar o que sobrar para a demonstração.
+
+## Demonstração
+
+1. `make painel` e abrir a pergunta central com um senador filtrado.
+2. Mostrar que a métrica no painel vem da camada semântica (depende do Danilo).
+3. Mostrar o item na fila de verificação e o registro do resultado (depende da Manuella e da Yzabella).
+4. Mostrar uma tentativa de acesso negada (depende do Victor).
+
+Plano B se algo falhar ao vivo: capturas de tela das mesmas etapas, geradas antes da defesa.
+
+## Pendências do material
+
+- [ ] Slides (formato a combinar com o grupo)
+- [ ] Capturas de tela da fila de verificação e do acesso negado, quando existirem
+- [ ] Ensaio cronometrado; só então trocar os tempos propostos por tempos medidos
+- [ ] Alinhar com cada responsável o que entra no seu bloco
